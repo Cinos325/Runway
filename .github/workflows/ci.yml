@@ -1,0 +1,94 @@
+name: CI
+
+# When to run this workflow:
+# - On every push to any branch (catches issues before merge)
+# - On every pull request (gives a status check before merging)
+on:
+  push:
+  pull_request:
+
+# A workflow can have multiple jobs that run in parallel.
+# Each job runs in its own fresh Linux VM provided by GitHub.
+jobs:
+  
+  # Job 1: validate JavaScript
+  javascript:
+    name: JavaScript checks
+    runs-on: ubuntu-latest
+    steps:
+      # Pull down the repo into the VM
+      - name: Check out repository
+        uses: actions/checkout@v4
+      
+      # Install Node so we can run node and npm commands
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      # Install dependencies (uses package-lock.json for reproducibility)
+      - name: Install dependencies
+        run: npm ci
+      
+      # Catch syntax errors in server.js — `node -c` parses without executing
+      - name: Check server.js syntax
+        run: node -c server.js
+      
+      # Catch syntax errors in the frontend JS too
+      - name: Check public/app.js syntax
+        run: node -c public/app.js
+      
+      # Run ESLint if a config exists; skip cleanly if not
+      - name: Run ESLint
+        run: |
+          if [ -f eslint.config.mjs ] || [ -f eslint.config.js ] || [ -f .eslintrc.json ]; then
+            npx eslint server.js public/app.js
+          else
+            echo "No ESLint config found — skipping. Add one to enable linting."
+          fi
+
+  # Job 2: validate Docker Compose
+  compose:
+    name: Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      
+      # docker compose is pre-installed on ubuntu-latest runners
+      # `config` parses the file, resolves env vars, and validates structure.
+      # We pass dummy values for any required variables so it doesn't fail
+      # on missing secrets in CI (real secrets stay out of the repo).
+      - name: Validate docker-compose.yml
+        env:
+          POSTGRES_DB: finance
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: dummy_for_ci_only
+          PGADMIN_EMAIL: ci@example.com
+          PGADMIN_PASSWORD: dummy_for_ci_only
+          TIMEZONE: UTC
+        run: docker compose -f docker-compose.yml config > /dev/null
+
+  # Job 3: confirm the Dockerfile actually builds
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      
+      # Use Buildx for caching support
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      # Build the image but don't push it anywhere — this only verifies
+      # the Dockerfile is valid and the build completes.
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: finance-mobile-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
