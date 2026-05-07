@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: finance-postgres
+    env_file: .env
+    environment:
+      TZ: ${TIMEZONE}
+    volumes:
+      - finance_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase
+    container_name: finance-metabase
+    depends_on:
+      - postgres
+    ports:
+      - "3001:3000"
+    env_file: .env
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: ${POSTGRES_PORT}
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: ${POSTGRES_HOST}
+      TZ: ${TIMEZONE}
+      JAVA_TIMEZONE: ${TIMEZONE}
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: finance-pgadmin
+    depends_on:
+      - postgres
+    ports:
+      - "8082:80"
+    env_file: .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+
+  finance-mobile-api:
+    build: .
+    container_name: finance-mobile-api
+    depends_on:
+      - postgres
+    ports:
+      - "3002:3002"
+    env_file: .env
+    environment:
+      DB_HOST: ${POSTGRES_HOST}
+      DB_PORT: ${POSTGRES_PORT}
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TIMEZONE}
+      TOOL_METABASE_URL: ${TOOL_METABASE_URL:-}
+      TOOL_PGADMIN_URL: ${TOOL_PGADMIN_URL:-}
+    volumes:
+      - ./public:/app/public
+    restart: unless-stopped
+
+volumes:
+  finance_postgres_data:
+    external: true
+  pgadmin_data:
