@@ -1,3 +1,14 @@
+# Finance app stack: Postgres + Metabase + pgAdmin + custom API/web form.
+#
+# To run from a fresh clone:
+#   1. Copy .env.example to .env and fill in real values
+#   2. docker volume create finance_postgres_data    (one-time, before first run)
+#   3. docker compose up -d --build
+#
+# The Postgres data volume is declared external so a `docker compose down`
+# can never accidentally delete years of transaction history. The trade-off
+# is that the volume must exist before the stack starts.
+
 services:
   postgres:
     image: postgres:16
