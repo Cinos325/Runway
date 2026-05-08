@@ -56,6 +56,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
       
+      # Compose's `env_file:` directive requires the file to exist on disk,
+      # even just to validate. Create a placeholder for CI use only.
+      - name: Create placeholder .env for CI
+        run: cp .env.example .env
+        
       # docker compose is pre-installed on ubuntu-latest runners
       # `config` parses the file, resolves env vars, and validates structure.
       # We pass dummy values for any required variables so it doesn't fail
@@ -68,7 +73,7 @@ jobs:
           PGADMIN_EMAIL: ci@example.com
           PGADMIN_PASSWORD: dummy_for_ci_only
           TIMEZONE: UTC
-        run: docker compose -f compose.yaml config > /dev/null
+        run: docker compose config > /dev/null
 
   # Job 3: confirm the Dockerfile actually builds
   docker-build:
