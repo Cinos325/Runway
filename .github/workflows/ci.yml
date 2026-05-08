@@ -60,7 +60,7 @@ jobs:
       # `config` parses the file, resolves env vars, and validates structure.
       # We pass dummy values for any required variables so it doesn't fail
       # on missing secrets in CI (real secrets stay out of the repo).
-      - name: Validate compose.yml
+      - name: Validate compose.yaml
         env:
           POSTGRES_DB: finance
           POSTGRES_USER: finance
@@ -68,7 +68,7 @@ jobs:
           PGADMIN_EMAIL: ci@example.com
           PGADMIN_PASSWORD: dummy_for_ci_only
           TIMEZONE: UTC
-        run: docker compose -f compose.yml config > /dev/null
+        run: docker compose -f compose.yaml config > /dev/null
 
   # Job 3: confirm the Dockerfile actually builds
   docker-build:
