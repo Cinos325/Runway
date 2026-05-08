@@ -55,7 +55,7 @@ function updatePaceRing(data) {
     const available = baseline + income - planned;
     // Edge case: nothing to spend means there's nothing meaningful to show
     if (available <= 0) {
-        setPaceRing(0, null, '—', 'no budget', '#86868b');
+        setPaceRing(0, null, '—', 'no budget', 'var(--text-secondary)');
         return;
     }
     
@@ -71,19 +71,20 @@ function updatePaceRing(data) {
     const expectedRemainingFrac = 1 - monthProgress;  // expected to still have ~55%
     
     // Color: how far ahead/behind pace are we?
-    // Difference > 0 = ahead of pace (good), < 0 = behind (worse)
+    // Difference > 0 = ahead of pace (good), < 0 = behind (worse).
+    // We use CSS variable names so the ring picks up the right shade for the active theme.
     const diff = remainingFrac - expectedRemainingFrac;
     let color, status;
     if (remainingFrac <= 0) {
-        color = '#ff3b30'; status = 'overspent';
+        color = 'var(--pace-low)'; status = 'overspent';
     } else if (diff >= 0.10) {
-        color = '#34c759'; status = 'ahead';     // green: comfortably under pace
+        color = 'var(--pace-ahead)'; status = 'ahead';
     } else if (diff >= -0.05) {
-        color = '#06c';    status = 'on pace';   // blue: roughly on track
+        color = 'var(--pace-on)';    status = 'on pace';
     } else if (diff >= -0.15) {
-        color = '#ff9500'; status = 'behind';    // amber: spending faster than pace
+        color = 'var(--pace-behind)'; status = 'behind';
     } else {
-        color = '#ff3b30'; status = 'low';       // red: significantly over pace
+        color = 'var(--pace-low)';   status = 'low';
     }
     
     setPaceRing(remainingFrac, expectedRemainingFrac, Math.round(remainingFrac * 100) + '%', status, color);
@@ -98,9 +99,12 @@ function setPaceRing(remainingFrac, expectedFrac, pctText, labelText, color) {
     const ring = document.getElementById('paceRing');
     
     progress.style.strokeDashoffset = CIRCUMFERENCE * (1 - remainingFrac);
-    progress.setAttribute('stroke', color);
+    // Set color via the ring's `color` property — both the SVG stroke (via
+    // currentColor in the CSS) and the percent text inherit from this.
+    // Using the `color` property means the value can be a CSS variable reference
+    // and the browser resolves it correctly.
+    ring.style.color = color;
     pctEl.textContent = pctText;
-    pctEl.style.color = color;
     labelEl.textContent = labelText;
     
     if (expectedFrac === null) {
@@ -320,7 +324,7 @@ function displayRecentTransactions(transactions) {
                     <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date}</div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <div class="recent-amount" style="color: ${t.type === 'Income' ? '#34c759' : '#ff3b30'}">
+                    <div class="recent-amount ${t.type === 'Income' ? 'income' : 'spending'}">
                         ${t.type === 'Income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
                     </div>
                     <button type="button" class="recent-item-edit-btn" data-action="edit" data-id="${t.id}" aria-label="Edit" title="Edit">✎</button>
@@ -841,24 +845,73 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
     }
 });
 
+// HTML for the sun/moon theme toggle button.
+// CSS handles which icon to show based on data-theme; both icons are always in the DOM.
+const THEME_TOGGLE_HTML = `
+    <button type="button" class="theme-toggle" id="themeToggleBtn" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <svg viewBox="0 0 24 24" class="icon-sun" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <line x1="12" y1="2" x2="12" y2="5"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="5" y2="12"/>
+            <line x1="19" y1="12" x2="22" y2="12"/>
+            <line x1="4.6" y1="4.6" x2="6.7" y2="6.7"/>
+            <line x1="17.3" y1="17.3" x2="19.4" y2="19.4"/>
+            <line x1="4.6" y1="19.4" x2="6.7" y2="17.3"/>
+            <line x1="17.3" y1="6.7" x2="19.4" y2="4.6"/>
+        </svg>
+        <svg viewBox="0 0 24 24" class="icon-moon" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+    </button>
+`;
+
 async function loadTools() {
+    const footer = document.getElementById('toolsFooter');
+    let toolsMarkup = '';
     try {
         const resp = await fetch(`${API_URL}/tools`);
         const tools = await resp.json();
-        const footer = document.getElementById('toolsFooter');
-        if (!Array.isArray(tools) || tools.length === 0) {
-            footer.innerHTML = '';
-            return;
+        if (Array.isArray(tools) && tools.length > 0) {
+            const links = tools.map(t =>
+                `<a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.name)}</a>`
+            ).join('');
+            toolsMarkup = `<span class="tools-footer-label">Tools:</span>${links}`;
         }
-        const links = tools.map(t =>
-            `<a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.name)}</a>`
-        ).join('');
-        footer.innerHTML = `<span class="tools-footer-label">Tools:</span>${links}`;
     } catch (err) {
         console.error('Failed to load tools:', err);
-        document.getElementById('toolsFooter').innerHTML = '';
     }
+    // Always render the theme toggle, even if there are no tool links.
+    footer.innerHTML = toolsMarkup + THEME_TOGGLE_HTML;
+    wireThemeToggle();
 }
+
+// ============================================
+// Theme management (light / dark / follow-system)
+// ============================================
+//
+// The initial theme is set by an inline script in index.html (before paint, to
+// avoid a flash). This block handles the toggle button and the runtime override
+// stored in localStorage.
+
+function wireThemeToggle() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+    });
+}
+
+// If the user has not set an explicit override, follow the OS preference live.
+// Once they've toggled manually, their choice persists and OS changes are ignored.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('theme')) {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    }
+});
 
 // Refresh button: re-fetch all dynamic data and briefly spin the icon to acknowledge the action
 document.getElementById('refreshBtn').addEventListener('click', async () => {

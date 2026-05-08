@@ -8,8 +8,10 @@
     <!-- PWA manifest (read by Android, partially by iOS) -->
     <link rel="manifest" href="/manifest.json">
     
-    <!-- Theme color: tints the browser UI on supported platforms -->
-    <meta name="theme-color" content="#06c">
+    <!-- Theme color: tints the browser UI on supported platforms.
+         Two variants — the browser picks the one matching the user's OS theme. -->
+    <meta name="theme-color" content="#06c" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
     
     <!-- iOS-specific tags. iOS doesn't fully use the manifest, so it needs its own. -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,6 +22,20 @@
     <!-- Standard favicon for browser tabs -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <link rel="stylesheet" href="/styles.css">
+    
+    <!-- Apply theme before paint to avoid a light-mode flash on dark-mode users.
+         This script must be inline and BEFORE the body so it runs before any rendering. -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark' || saved === 'light') {
+                document.documentElement.setAttribute('data-theme', saved);
+            } else {
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+            }
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
@@ -29,31 +45,24 @@
                 <div class="header-actions">
                     <button type="button" class="icon-button" id="editBaselineBtn" title="Edit baseline" aria-label="Edit baseline">
                         <svg viewBox="0 0 24 24">
-                            <!-- baseline (horizontal line with a dot marker) -->
                             <line x1="2" y1="20" x2="22" y2="20"/>
                             <circle cx="9" cy="20" r="1.6" fill="currentColor" stroke="none"/>
-                            <!-- pencil overlay, angled, drawing on the line -->
                             <path d="M14 4.5l3.5 3.5L9 16.5l-4 1 1-4z"/>
                             <line x1="13" y1="5.5" x2="16.5" y2="9"/>
                         </svg>
                     </button>
                     <button type="button" class="icon-button" id="manageRecurringBtn" title="Manage recurring" aria-label="Manage recurring">
                         <svg viewBox="0 0 24 24">
-                            <!-- Calendar body -->
                             <rect x="3" y="5" width="18" height="16" rx="2"/>
-                            <!-- Header strip divider (mimics the colored band on calendar icons) -->
                             <line x1="3" y1="9.5" x2="21" y2="9.5"/>
-                            <!-- Two pegs/binding holes at the top -->
                             <line x1="8" y1="3" x2="8" y2="6"/>
                             <line x1="16" y1="3" x2="16" y2="6"/>
-                            <!-- Recurring symbol (two opposing arrows) centered in calendar body -->
                             <path d="M9 14h5l-1.5-1.5"/>
                             <path d="M15 17h-5l1.5 1.5"/>
                         </svg>
                     </button>
                     <button type="button" class="icon-button" id="refreshBtn" title="Refresh" aria-label="Refresh">
                         <svg viewBox="0 0 24 24">
-                            <!-- classic circular refresh arrow: a partial circle with an arrowhead -->
                             <path d="M21 12a9 9 0 1 1-3-6.7"/>
                             <polyline points="21,3 21,9 15,9"/>
                         </svg>
@@ -68,13 +77,10 @@
                 </div>
                 <div class="pace-ring" id="paceRing" title="">
                     <svg viewBox="0 0 100 100">
-                        <!-- track -->
                         <circle class="pace-ring-track" cx="50" cy="50" r="42" fill="none" stroke-width="8"/>
-                        <!-- progress arc -->
                         <circle class="pace-ring-progress" id="paceRingProgress" cx="50" cy="50" r="42"
-                                fill="none" stroke="#06c" stroke-width="8"
+                                fill="none" stroke="currentColor" stroke-width="8"
                                 stroke-dasharray="263.89" stroke-dashoffset="263.89"/>
-                        <!-- on-pace tick mark -->
                         <line class="pace-ring-marker" id="paceRingMarker"
                               x1="50" y1="4" x2="50" y2="14"
                               transform="rotate(0 50 50)"/>
@@ -112,12 +118,7 @@
                 
                 <div class="form-group autocomplete">
                     <label>Category</label>
-                    <input 
-                        type="text" 
-                        id="category" 
-                        placeholder="Select or type category..."
-                        autocomplete="off"
-                        required>
+                    <input type="text" id="category" placeholder="Select or type category..." autocomplete="off" required>
                     <div class="autocomplete-list" id="categoryList"></div>
                 </div>
                 
@@ -133,12 +134,7 @@
                 
                 <div class="form-group autocomplete">
                     <label>Account</label>
-                    <input 
-                        type="text" 
-                        id="account" 
-                        placeholder="Select or type account..."
-                        autocomplete="off"
-                        required>
+                    <input type="text" id="account" placeholder="Select or type account..." autocomplete="off" required>
                     <div class="autocomplete-list" id="accountList"></div>
                 </div>
                 
@@ -179,7 +175,7 @@
             <p>This will permanently remove it. This cannot be undone.</p>
             <div class="modal-buttons">
                 <button type="button" class="modal-btn-cancel" id="cancelDeleteBtn">Cancel</button>
-                <button type="button" class="modal-btn-save" id="confirmDeleteBtn" style="background: #ff3b30;">Delete</button>
+                <button type="button" class="modal-btn-save modal-btn-danger" id="confirmDeleteBtn">Delete</button>
             </div>
         </div>
     </div>
@@ -187,10 +183,9 @@
     <!-- Manage recurring transactions modal -->
     <div class="modal-overlay" id="recurringModal">
         <div class="modal modal-wide">
-            <!-- List view -->
             <div id="recurringListView">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h2 style="font-size: 18px; color: #1d1d1f;">Recurring transactions</h2>
+                    <h2 style="font-size: 18px;">Recurring transactions</h2>
                     <button type="button" class="add-button" id="recurringAddNewBtn">+ Add new</button>
                 </div>
                 <div class="modal-body" id="recurringList">
@@ -201,10 +196,9 @@
                 </div>
             </div>
             
-            <!-- Add/edit form view -->
             <div id="recurringFormView" style="display: none;">
-                <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 4px;" id="recurringFormTitle">Add recurring transaction</h2>
-                <p style="font-size: 13px; color: #86868b; margin-bottom: 14px;">These appear in your spending power calculation as planned payments (except Income, which adds to it).</p>
+                <h2 style="font-size: 18px; margin-bottom: 4px;" id="recurringFormTitle">Add recurring transaction</h2>
+                <p class="modal-subtitle">These appear in your spending power calculation as planned payments (except Income, which adds to it).</p>
                 <div class="modal-body">
                     <div class="form-group">
                         <label>Name</label>
@@ -269,8 +263,7 @@
                         <input type="text" id="recDescription">
                     </div>
                     
-                    <!-- Installments shortcut, only shown when adding -->
-                    <div id="installmentsBlock" style="border-top: 1px solid #f0f0f2; padding-top: 12px; margin-top: 12px;">
+                    <div id="installmentsBlock" class="installments-block">
                         <div class="toggle-row">
                             <button type="button" class="toggle-button" id="installmentsToggle" aria-pressed="false">
                                 <span class="toggle-icon">✓</span>
@@ -278,7 +271,7 @@
                             </button>
                         </div>
                         <div id="installmentsFields" style="display: none;">
-                            <p style="font-size: 12px; color: #86868b; margin-bottom: 8px;">
+                            <p class="installments-help">
                                 Enter the <strong>total purchase amount</strong> in the Amount field above and the
                                 <strong>first payment date</strong> in Start date. The per-payment amount and end date will be computed on save.
                             </p>
@@ -288,13 +281,12 @@
                                     <input type="number" id="installmentCount" min="2" placeholder="e.g. 6">
                                 </div>
                                 <div class="form-group" style="display: flex; align-items: end;">
-                                    <div style="font-size: 13px; color: #86868b; padding-bottom: 14px;" id="installmentPreview"></div>
+                                    <div class="installment-preview" id="installmentPreview"></div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- "Pay today" toggle, only shown when adding (not editing) -->
                     <div class="toggle-row" id="payTodayRow">
                         <button type="button" class="toggle-button" id="payTodayToggle" aria-pressed="false">
                             <span class="toggle-icon">✓</span>
