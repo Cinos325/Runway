@@ -52,6 +52,7 @@ export default [
                 URLSearchParams: 'readonly',
                 Promise: 'readonly',
                 Date: 'readonly',
+                localStorage: 'readonly',
             },
         },
         rules: {
