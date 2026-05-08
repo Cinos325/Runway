@@ -141,6 +141,14 @@
                 <button type="submit" class="submit-btn">Add Transaction</button>
             </form>
         </div>
+
+        <!-- Installment plan progress (auto-detected from active recurring spending entries) -->
+        <div class="installments-card" id="installmentsCard">
+            <h2 class="installments-heading">Installment plans</h2>
+            <div id="installmentsList">
+                <!-- Populated by loadInstallments() -->
+            </div>
+        </div>
         
         <div class="recent-transactions">
             <h2 style="font-size: 20px; margin-bottom: 16px;">Recent Transactions</h2>

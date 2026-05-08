@@ -90,6 +90,26 @@ app.get('/api/transactions/recent', async (req, res) => {
   }
 });
 
+// List active installment plans with progress.
+// An installment plan is a Spending-type recurring transaction with an end_date.
+app.get('/api/installments', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id, name, payee, category, account, frequency,
+        start_date, end_date,
+        payment_amount, total_periods, target_amount,
+        amount_paid, payments_made, amount_remaining,
+        pct_paid, pct_time_elapsed
+      FROM installment_progress
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Add new transaction
 function validateTransactionInput(body) {
   const validTypes = ['Spending', 'Income', 'Transfer', 'Bills'];

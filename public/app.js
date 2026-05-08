@@ -176,6 +176,69 @@ async function loadAccounts() {
     }
 }
 
+async function loadInstallments() {
+    try {
+        const resp = await fetch(`${API_URL}/installments`);
+        const items = await resp.json();
+        const card = document.getElementById('installmentsCard');
+        const list = document.getElementById('installmentsList');
+        
+        if (!Array.isArray(items) || items.length === 0) {
+            card.classList.add('empty');
+            return;
+        }
+        card.classList.remove('empty');
+        
+        list.innerHTML = items.map(renderInstallment).join('');
+    } catch (err) {
+        console.error('Failed to load installments:', err);
+    }
+}
+
+function renderInstallment(it) {
+    const pctPaid = parseFloat(it.pct_paid) || 0;
+    const pctTime = parseFloat(it.pct_time_elapsed) || 0;
+    const paid = parseFloat(it.amount_paid).toFixed(2);
+    const target = parseFloat(it.target_amount).toFixed(2);
+    const remaining = parseFloat(it.amount_remaining).toFixed(2);
+    
+    // Pace status: the same idea as the spending power ring.
+    // pctPaid > pctTime → ahead of schedule. pctPaid < pctTime → behind.
+    const diff = pctPaid - pctTime;
+    let statusClass, statusText;
+    if (pctPaid >= 1) {
+        statusClass = 'ahead'; statusText = 'Complete';
+    } else if (diff >= 0.05) {
+        statusClass = 'ahead'; statusText = 'Ahead of schedule';
+    } else if (diff >= -0.05) {
+        statusClass = 'on-pace'; statusText = 'On pace';
+    } else if (diff >= -0.15) {
+        statusClass = 'behind'; statusText = 'Behind';
+    } else {
+        statusClass = 'late'; statusText = 'Far behind';
+    }
+    
+    const fillWidth = Math.min(100, pctPaid * 100).toFixed(1);
+    const markerLeft = Math.min(100, pctTime * 100).toFixed(1);
+    
+    return `
+        <div class="installment-item">
+            <div class="installment-header">
+                <div class="installment-name">${escapeHtml(it.name)}</div>
+                <div class="installment-amount">$${paid} / $${target}</div>
+            </div>
+            <div class="installment-progress-bar">
+                <div class="installment-progress-fill ${statusClass}" style="width: ${fillWidth}%"></div>
+                <div class="installment-pace-marker" style="left: ${markerLeft}%" title="Expected position at this point in the timeline"></div>
+            </div>
+            <div class="installment-meta">
+                <span>${it.payments_made} of ${it.total_periods} payments • ends ${it.end_date}</span>
+                <span class="installment-status ${statusClass}">${statusText}</span>
+            </div>
+        </div>
+    `;
+}
+
 async function loadRecentTransactions() {
     try {
         const response = await fetch(`${API_URL}/transactions/recent`);
@@ -291,6 +354,7 @@ document.getElementById('transactionForm').addEventListener('submit', async func
         
         await loadSpendingPower();
         await loadRecentTransactions();
+        await loadInstallments();
         
         if (isEditing) {
             exitEditMode();
@@ -459,6 +523,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
         closeDeleteConfirm();
         await loadSpendingPower();
         await loadRecentTransactions();
+        await loadInstallments();
     } catch (err) {
         alert('Failed to delete. Please try again.');
         console.error(err);
@@ -836,6 +901,7 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
         await loadRecurringList();
         await loadSpendingPower();
         await loadRecentTransactions();
+        await loadInstallments();
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
         console.error(err);
@@ -921,6 +987,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
         await Promise.all([
             loadSpendingPower(),
             loadRecentTransactions(),
+            loadInstallments(),
             loadCategories(),
             loadAccounts(),
         ]);
@@ -936,8 +1003,10 @@ loadRecentTransactions();
 loadCategories();
 loadAccounts();
 loadTools();
+loadInstallments();
 
 setInterval(() => {
     loadSpendingPower();
     loadRecentTransactions();
+    loadInstallments();
 }, 30000);
