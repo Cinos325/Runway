@@ -197,7 +197,7 @@ app.put('/api/transactions/:id', async (req, res) => {
       transaction_date, type, amount, category,
       description || null, payee || null, account || null,
       id,
-    ]);
+    ])
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Not found' });
     }
