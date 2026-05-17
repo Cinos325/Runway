@@ -160,6 +160,24 @@
         <div class="tools-footer" id="toolsFooter"></div>
     </div>
 
+    <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
+    <div class="goals-card" id="goalsCard">
+        <div class="goals-card-header">
+            <h2 class="goals-heading">Goals</h2>
+            <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
+        </div>
+        
+        <div class="goals-section" id="installmentsSection">
+            <div class="goals-section-title">Installments</div>
+            <div id="installmentsList"></div>
+        </div>
+        
+        <div class="goals-section" id="savingsGoalsSection">
+            <div class="goals-section-title">Savings goals</div>
+            <div id="savingsGoalsList"></div>
+        </div>
+    </div>
+
     <!-- Savings goal create/edit modal -->
     <div class="modal-overlay" id="goalModal">
         <div class="modal">
@@ -317,22 +335,29 @@
                         <label>Description (optional)</label>
                         <input type="text" id="recDescription">
                     </div>
-                    
-                    <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
-                    <div class="goals-card" id="goalsCard">
-                        <div class="goals-card-header">
-                            <h2 class="goals-heading">Goals</h2>
-                            <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
+
+                    <!-- Installments shortcut, only shown when adding -->
+                    <div id="installmentsBlock" class="installments-block">
+                        <div class="toggle-row">
+                            <button type="button" class="toggle-button" id="installmentsToggle" aria-pressed="false">
+                                <span class="toggle-icon">✓</span>
+                                <span>Split a one-time purchase into installments</span>
+                            </button>
                         </div>
-                        
-                        <div class="goals-section" id="installmentsSection">
-                            <div class="goals-section-title">Installments</div>
-                            <div id="installmentsList"></div>
-                        </div>
-                        
-                        <div class="goals-section" id="savingsGoalsSection">
-                            <div class="goals-section-title">Savings goals</div>
-                            <div id="savingsGoalsList"></div>
+                        <div id="installmentsFields" style="display: none;">
+                            <p class="installments-help">
+                                Enter the <strong>total purchase amount</strong> in the Amount field above and the
+                                <strong>first payment date</strong> in Start date. The per-payment amount and end date will be computed on save.
+                            </p>
+                            <div class="form-row-inline">
+                                <div class="form-group">
+                                    <label>Number of payments</label>
+                                    <input type="number" id="installmentCount" min="2" placeholder="e.g. 6">
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: end;">
+                                    <div class="installment-preview" id="installmentPreview"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
