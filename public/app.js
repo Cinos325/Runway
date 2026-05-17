@@ -549,7 +549,7 @@ document.getElementById('transactionForm').addEventListener('submit', async func
         
         await loadSpendingPower();
         await loadRecentTransactions();
-        await loadInstallments();
+        await loadGoals();
         
         if (isEditing) {
             exitEditMode();
@@ -718,7 +718,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
         closeDeleteConfirm();
         await loadSpendingPower();
         await loadRecentTransactions();
-        await loadInstallments();
+        await loadGoals();
     } catch (err) {
         alert('Failed to delete. Please try again.');
         console.error(err);
@@ -1096,7 +1096,7 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
         await loadRecurringList();
         await loadSpendingPower();
         await loadRecentTransactions();
-        await loadInstallments();
+        await loadGoals();
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
         console.error(err);
@@ -1182,7 +1182,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
         await Promise.all([
             loadSpendingPower(),
             loadRecentTransactions(),
-            loadInstallments(),
+            loadGoals(),
             loadCategories(),
             loadAccounts(),
         ]);
@@ -1198,10 +1198,10 @@ loadRecentTransactions();
 loadCategories();
 loadAccounts();
 loadTools();
-loadInstallments();
+loadGoals();
 
 setInterval(() => {
     loadSpendingPower();
     loadRecentTransactions();
-    loadInstallments();
+    loadGoals();
 }, 30000);
