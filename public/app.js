@@ -176,23 +176,41 @@ async function loadAccounts() {
     }
 }
 
-async function loadInstallments() {
-    try {
-        const resp = await fetch(`${API_URL}/installments`);
-        const items = await resp.json();
-        const card = document.getElementById('installmentsCard');
-        const list = document.getElementById('installmentsList');
-        
-        if (!Array.isArray(items) || items.length === 0) {
-            card.classList.add('empty');
-            return;
-        }
-        card.classList.remove('empty');
-        
-        list.innerHTML = items.map(renderInstallment).join('');
-    } catch (err) {
-        console.error('Failed to load installments:', err);
+// ============================================
+// Goals card (installments + savings goals)
+// ============================================
+
+async function loadGoals() {
+    // Fetch both in parallel
+    const [installments, savingsGoals] = await Promise.all([
+        fetchJSON(`${API_URL}/installments`).catch(err => { console.error(err); return []; }),
+        fetchJSON(`${API_URL}/goals`).catch(err => { console.error(err); return []; }),
+    ]);
+    
+    renderInstallments(installments);
+    renderSavingsGoals(savingsGoals);
+    
+    // Hide the whole card if both subsections are empty
+    const card = document.getElementById('goalsCard');
+    const hasContent = installments.length > 0 || savingsGoals.length > 0;
+    card.classList.toggle('empty', !hasContent);
+}
+
+async function fetchJSON(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`${url}: ${resp.status}`);
+    return await resp.json();
+}
+
+function renderInstallments(items) {
+    const section = document.getElementById('installmentsSection');
+    const list = document.getElementById('installmentsList');
+    if (!Array.isArray(items) || items.length === 0) {
+        section.classList.add('empty');
+        return;
     }
+    section.classList.remove('empty');
+    list.innerHTML = items.map(renderInstallment).join('');
 }
 
 function renderInstallment(it) {
@@ -200,10 +218,7 @@ function renderInstallment(it) {
     const pctTime = parseFloat(it.pct_time_elapsed) || 0;
     const paid = parseFloat(it.amount_paid).toFixed(2);
     const target = parseFloat(it.target_amount).toFixed(2);
-    const remaining = parseFloat(it.amount_remaining).toFixed(2);
     
-    // Pace status: the same idea as the spending power ring.
-    // pctPaid > pctTime → ahead of schedule. pctPaid < pctTime → behind.
     const diff = pctPaid - pctTime;
     let statusClass, statusText;
     if (pctPaid >= 1) {
@@ -229,7 +244,7 @@ function renderInstallment(it) {
             </div>
             <div class="installment-progress-bar">
                 <div class="installment-progress-fill ${statusClass}" style="width: ${fillWidth}%"></div>
-                <div class="installment-pace-marker" style="left: ${markerLeft}%" title="Expected position at this point in the timeline"></div>
+                <div class="installment-pace-marker" style="left: ${markerLeft}%" title="Expected position at this point"></div>
             </div>
             <div class="installment-meta">
                 <span>${it.payments_made} of ${it.total_periods} payments • ends ${it.end_date}</span>
@@ -238,6 +253,186 @@ function renderInstallment(it) {
         </div>
     `;
 }
+
+function renderSavingsGoals(items) {
+    const section = document.getElementById('savingsGoalsSection');
+    const list = document.getElementById('savingsGoalsList');
+    if (!Array.isArray(items) || items.length === 0) {
+        section.classList.add('empty');
+        return;
+    }
+    section.classList.remove('empty');
+    list.innerHTML = items.map(renderSavingsGoal).join('');
+}
+
+function renderSavingsGoal(g) {
+    const pct = parseFloat(g.pct_saved) || 0;
+    const saved = parseFloat(g.amount_saved).toFixed(2);
+    const target = parseFloat(g.target_amount).toFixed(2);
+    const remaining = parseFloat(g.amount_remaining).toFixed(2);
+    const isComplete = pct >= 1;
+    
+    const fillWidth = Math.min(100, pct * 100).toFixed(1);
+    const pctText = Math.round(pct * 100) + '%';
+    
+    return `
+        <div class="goal-item" data-goal-id="${g.id}">
+            <div class="goal-item-header">
+                <div class="goal-name">${escapeHtml(g.name)}</div>
+                <div class="goal-amount">$${saved} / $${target}</div>
+            </div>
+            <div class="goal-progress-bar">
+                <div class="goal-progress-fill ${isComplete ? 'complete' : ''}" style="width: ${fillWidth}%"></div>
+            </div>
+            <div class="goal-meta">
+                <span>Category: ${escapeHtml(g.match_category)}</span>
+                <span class="goal-pct ${isComplete ? 'complete' : ''}">
+                    ${isComplete ? 'Complete' : `${pctText} • $${remaining} to go`}
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================
+// Savings goal modal (create / edit)
+// ============================================
+
+const goalModal = document.getElementById('goalModal');
+const goalNameInput = document.getElementById('goalName');
+const goalTargetInput = document.getElementById('goalTarget');
+const goalCategoryInput = document.getElementById('goalCategory');
+const goalNotesInput = document.getElementById('goalNotes');
+const goalIsActiveBtn = document.getElementById('goalIsActive');
+let editingGoalId = null;
+
+function openGoalModalForAdd() {
+    editingGoalId = null;
+    document.getElementById('goalModalTitle').textContent = 'New savings goal';
+    goalNameInput.value = '';
+    goalTargetInput.value = '';
+    goalCategoryInput.value = '';
+    goalNotesInput.value = '';
+    setToggled(goalIsActiveBtn, true);
+    document.getElementById('goalEditOnlyRows').style.display = 'none';
+    document.getElementById('goalEditButtons').style.display = 'none';
+    goalModal.classList.add('active');
+    goalNameInput.focus();
+}
+
+function openGoalModalForEdit(goal) {
+    editingGoalId = goal.id;
+    document.getElementById('goalModalTitle').textContent = 'Edit savings goal';
+    goalNameInput.value = goal.name || '';
+    goalTargetInput.value = parseFloat(goal.target_amount).toFixed(2);
+    goalCategoryInput.value = goal.match_category || '';
+    goalNotesInput.value = goal.notes || '';
+    setToggled(goalIsActiveBtn, true);  // editing implies still active
+    document.getElementById('goalEditOnlyRows').style.display = '';
+    document.getElementById('goalEditButtons').style.display = 'grid';
+    goalModal.classList.add('active');
+}
+
+goalIsActiveBtn.addEventListener('click', () => setToggled(goalIsActiveBtn, !isToggled(goalIsActiveBtn)));
+
+document.getElementById('addGoalBtn').addEventListener('click', openGoalModalForAdd);
+document.getElementById('goalCancelBtn').addEventListener('click', () => goalModal.classList.remove('active'));
+closeOnBackdropClick(goalModal, () => goalModal.classList.remove('active'));
+
+// Click a goal item to edit it
+document.getElementById('savingsGoalsList').addEventListener('click', async (e) => {
+    const item = e.target.closest('.goal-item');
+    if (!item) return;
+    const id = parseInt(item.dataset.goalId, 10);
+    if (isNaN(id)) return;
+    try {
+        const goals = await fetchJSON(`${API_URL}/goals`);
+        const goal = goals.find(g => g.id === id);
+        if (goal) openGoalModalForEdit(goal);
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+document.getElementById('goalSaveBtn').addEventListener('click', async () => {
+    const payload = {
+        name: goalNameInput.value.trim(),
+        target_amount: parseFloat(goalTargetInput.value),
+        match_category: goalCategoryInput.value.trim(),
+        notes: goalNotesInput.value.trim() || null,
+    };
+    if (editingGoalId !== null) {
+        payload.is_active = isToggled(goalIsActiveBtn);
+    }
+    
+    const btn = document.getElementById('goalSaveBtn');
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+    
+    try {
+        const url = editingGoalId === null
+            ? `${API_URL}/goals`
+            : `${API_URL}/goals/${editingGoalId}`;
+        const method = editingGoalId === null ? 'POST' : 'PUT';
+        const resp = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            const detail = err.details ? '\n\n' + err.details.join('\n') : '';
+            throw new Error((err.error || 'Save failed') + detail);
+        }
+        goalModal.classList.remove('active');
+        await loadGoals();
+    } catch (err) {
+        alert('Failed to save goal.\n\n' + err.message);
+        console.error(err);
+    } finally {
+        btn.textContent = 'Save';
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('goalDeleteBtn').addEventListener('click', async () => {
+    if (editingGoalId === null) return;
+    if (!confirm('Delete this goal? Saved contributions in your transaction history are NOT deleted; only the goal itself is removed.')) return;
+    try {
+        const resp = await fetch(`${API_URL}/goals/${editingGoalId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        goalModal.classList.remove('active');
+        await loadGoals();
+    } catch (err) {
+        alert('Failed to delete.');
+        console.error(err);
+    }
+});
+
+document.getElementById('goalMarkCompleteBtn').addEventListener('click', async () => {
+    if (editingGoalId === null) return;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+        const resp = await fetch(`${API_URL}/goals/${editingGoalId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: goalNameInput.value.trim(),
+                target_amount: parseFloat(goalTargetInput.value),
+                match_category: goalCategoryInput.value.trim(),
+                notes: goalNotesInput.value.trim() || null,
+                is_active: false,
+                completed_at: today,
+            }),
+        });
+        if (!resp.ok) throw new Error('Update failed');
+        goalModal.classList.remove('active');
+        await loadGoals();
+    } catch (err) {
+        alert('Failed to mark complete.');
+        console.error(err);
+    }
+});
 
 async function loadRecentTransactions() {
     try {

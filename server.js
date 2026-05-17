@@ -110,6 +110,107 @@ app.get('/api/installments', async (req, res) => {
   }
 });
 
+// ===== Savings goals =====
+
+function validateGoalInput(body) {
+  const errors = [];
+  if (!body.name || !String(body.name).trim()) errors.push('name is required');
+  const target = parseFloat(body.target_amount);
+  if (isNaN(target) || target <= 0) errors.push('target_amount must be a positive number');
+  if (!body.match_category || !String(body.match_category).trim()) {
+    errors.push('match_category is required');
+  }
+  return errors;
+}
+
+// List all active savings goals with progress
+app.get('/api/goals', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, target_amount, match_category, notes,
+             created_at, completed_at,
+             amount_saved, amount_remaining, pct_saved, contribution_count
+      FROM savings_goal_progress
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Create a new savings goal
+app.post('/api/goals', async (req, res) => {
+  const errors = validateGoalInput(req.body);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+  const { name, target_amount, match_category, notes } = req.body;
+  try {
+    const result = await pool.query(`
+      INSERT INTO savings_goals (name, target_amount, match_category, notes)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [name.trim(), parseFloat(target_amount), match_category.trim(), notes || null]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create goal' });
+  }
+});
+
+// Update a savings goal
+app.put('/api/goals/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  
+  const errors = validateGoalInput(req.body);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+  
+  const { name, target_amount, match_category, notes, is_active, completed_at } = req.body;
+  try {
+    const result = await pool.query(`
+      UPDATE savings_goals SET
+        name = $1, target_amount = $2, match_category = $3, notes = $4,
+        is_active = $5, completed_at = $6, updated_at = now()
+      WHERE id = $7
+      RETURNING *
+    `, [
+      name.trim(),
+      parseFloat(target_amount),
+      match_category.trim(),
+      notes || null,
+      is_active !== false,
+      completed_at || null,
+      id,
+    ]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update goal' });
+  }
+});
+
+// Delete a savings goal
+app.delete('/api/goals/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const result = await pool.query(
+      'DELETE FROM savings_goals WHERE id = $1 RETURNING id',
+      [id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: result.rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete goal' });
+  }
+});
+
 // Add new transaction
 function validateTransactionInput(body) {
   const validTypes = ['Spending', 'Income', 'Transfer', 'Bills'];

@@ -159,6 +159,53 @@
         
         <div class="tools-footer" id="toolsFooter"></div>
     </div>
+
+    <!-- Savings goal create/edit modal -->
+    <div class="modal-overlay" id="goalModal">
+        <div class="modal">
+            <h2 id="goalModalTitle">New savings goal</h2>
+            <p class="modal-subtitle">Track money set aside toward a future purchase. Any Savings-type transaction with the matching category counts toward this goal.</p>
+            
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="goalName" placeholder="New laptop, vacation fund, etc.">
+            </div>
+            
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Target amount</label>
+                    <input type="number" id="goalTarget" step="0.01" placeholder="1000.00">
+                </div>
+                <div class="form-group">
+                    <label>Match category</label>
+                    <input type="text" id="goalCategory" placeholder="New Laptop">
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Notes (optional)</label>
+                <textarea id="goalNotes" placeholder="What is this goal for?"></textarea>
+            </div>
+            
+            <div class="toggle-row" id="goalEditOnlyRows" style="display: none;">
+                <button type="button" class="toggle-button active" id="goalIsActive" aria-pressed="true">
+                    <span class="toggle-icon">✓</span>
+                    <span>Active</span>
+                </button>
+            </div>
+            
+            <div class="modal-buttons" id="goalModalButtons">
+                <button type="button" class="modal-btn-cancel" id="goalCancelBtn">Cancel</button>
+                <button type="button" class="modal-btn-save" id="goalSaveBtn">Save</button>
+            </div>
+            
+            <div class="modal-buttons" id="goalEditButtons" style="display: none; grid-template-columns: 1fr 1fr 1fr; margin-top: 8px;">
+                <button type="button" class="modal-btn-cancel danger" id="goalDeleteBtn">Delete</button>
+                <button type="button" class="modal-btn-cancel" id="goalMarkCompleteBtn">Mark complete</button>
+                <div></div>
+            </div>
+        </div>
+    </div>
     
     <!-- Update baseline modal -->
     <div class="modal-overlay" id="baselineModal">
@@ -271,27 +318,21 @@
                         <input type="text" id="recDescription">
                     </div>
                     
-                    <div id="installmentsBlock" class="installments-block">
-                        <div class="toggle-row">
-                            <button type="button" class="toggle-button" id="installmentsToggle" aria-pressed="false">
-                                <span class="toggle-icon">✓</span>
-                                <span>Split a one-time purchase into installments</span>
-                            </button>
+                    <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
+                    <div class="goals-card" id="goalsCard">
+                        <div class="goals-card-header">
+                            <h2 class="goals-heading">Goals</h2>
+                            <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
                         </div>
-                        <div id="installmentsFields" style="display: none;">
-                            <p class="installments-help">
-                                Enter the <strong>total purchase amount</strong> in the Amount field above and the
-                                <strong>first payment date</strong> in Start date. The per-payment amount and end date will be computed on save.
-                            </p>
-                            <div class="form-row-inline">
-                                <div class="form-group">
-                                    <label>Number of payments</label>
-                                    <input type="number" id="installmentCount" min="2" placeholder="e.g. 6">
-                                </div>
-                                <div class="form-group" style="display: flex; align-items: end;">
-                                    <div class="installment-preview" id="installmentPreview"></div>
-                                </div>
-                            </div>
+                        
+                        <div class="goals-section" id="installmentsSection">
+                            <div class="goals-section-title">Installments</div>
+                            <div id="installmentsList"></div>
+                        </div>
+                        
+                        <div class="goals-section" id="savingsGoalsSection">
+                            <div class="goals-section-title">Savings goals</div>
+                            <div id="savingsGoalsList"></div>
                         </div>
                     </div>
                     
