@@ -190,10 +190,22 @@ async function loadGoals() {
     renderInstallments(installments);
     renderSavingsGoals(savingsGoals);
     
-    // Hide the whole card if both subsections are empty
+    // Card is always visible so you can add goals even when there are none yet
     const card = document.getElementById('goalsCard');
-    const hasContent = installments.length > 0 || savingsGoals.length > 0;
-    card.classList.toggle('empty', !hasContent);
+    card.classList.remove('empty');
+
+    // Show a friendly empty-state message under "Savings goals" if there are none.
+    // Installments are auto-detected so a different message there:
+    const installmentsList = document.getElementById('installmentsList');
+    const savingsGoalsList = document.getElementById('savingsGoalsList');
+    if (installments.length === 0) {
+        installmentsList.innerHTML = '<div class="goal-empty-state">No installment plans detected. Add a Spending-type recurring transaction with an end date to track one here.</div>';
+        document.getElementById('installmentsSection').classList.remove('empty');
+    }
+    if (savingsGoals.length === 0) {
+        savingsGoalsList.innerHTML = '<div class="goal-empty-state">No savings goals yet. Click + New goal above to create one.</div>';
+        document.getElementById('savingsGoalsSection').classList.remove('empty');
+    }
 }
 
 async function fetchJSON(url) {

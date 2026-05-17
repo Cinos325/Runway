@@ -141,12 +141,22 @@
                 <button type="submit" class="submit-btn">Add Transaction</button>
             </form>
         </div>
-
-        <!-- Installment plan progress (auto-detected from active recurring spending entries) -->
-        <div class="installments-card" id="installmentsCard">
-            <h2 class="installments-heading">Installment plans</h2>
-            <div id="installmentsList">
-                <!-- Populated by loadInstallments() -->
+        
+        <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
+        <div class="goals-card" id="goalsCard">
+            <div class="goals-card-header">
+                <h2 class="goals-heading">Goals</h2>
+                <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
+            </div>
+            
+            <div class="goals-section" id="installmentsSection">
+                <div class="goals-section-title">Installments</div>
+                <div id="installmentsList"></div>
+            </div>
+            
+            <div class="goals-section" id="savingsGoalsSection">
+                <div class="goals-section-title">Savings goals</div>
+                <div id="savingsGoalsList"></div>
             </div>
         </div>
         
@@ -158,24 +168,6 @@
         </div>
         
         <div class="tools-footer" id="toolsFooter"></div>
-    </div>
-
-    <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
-    <div class="goals-card" id="goalsCard">
-        <div class="goals-card-header">
-            <h2 class="goals-heading">Goals</h2>
-            <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
-        </div>
-        
-        <div class="goals-section" id="installmentsSection">
-            <div class="goals-section-title">Installments</div>
-            <div id="installmentsList"></div>
-        </div>
-        
-        <div class="goals-section" id="savingsGoalsSection">
-            <div class="goals-section-title">Savings goals</div>
-            <div id="savingsGoalsList"></div>
-        </div>
     </div>
 
     <!-- Savings goal create/edit modal -->
