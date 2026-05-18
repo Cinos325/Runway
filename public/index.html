@@ -94,108 +94,110 @@
         <button type="button" class="icon-button" id="editBaselineBtn" title="Edit baseline" aria-label="Edit baseline"></button>
         <button type="button" class="icon-button" id="manageRecurringBtn" title="Manage recurring" aria-label="Manage recurring"></button>
         <button type="button" class="icon-button" id="refreshBtn" title="Refresh" aria-label="Refresh"></button>
+        <div class="tools-footer" id="toolsFooter"></div>
     </div>
     
     <div class="container">
         <!-- ====== HOME TAB ====== -->
+        <!-- Trimmed in stage 3: just the things you check passively.
+             Recent transactions (3-5) for quick context, then goals for periodic awareness.
+             The form moved to Add; tools footer moved to a hidden holder (stage 5 places it on More). -->
         <div class="tab-pane active" id="homeTab" data-tab="home">
-        
-        <div class="success-message" id="successMsg">Transaction added!</div>
-        
-        <div class="form-card" id="formCard">
-            <div class="edit-banner">
-                <span id="editBannerText">Editing transaction</span>
-                <button type="button" class="edit-banner-cancel" id="cancelEditBtn">Cancel edit</button>
-            </div>
-            <form id="transactionForm">
-                <div class="form-group">
-                    <label>Type</label>
-                    <div class="type-buttons">
-                        <button type="button" class="type-btn active" data-type="Spending">Spending</button>
-                        <button type="button" class="type-btn" data-type="Income">Income</button>
-                        <button type="button" class="type-btn" data-type="Transfer">Transfer</button>
-                        <button type="button" class="type-btn" data-type="Bills">Bills</button>
-                    </div>
+            <div class="success-message" id="successMsg">Transaction added!</div>
+            
+            <div class="recent-transactions">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Recent</h2>
+                    <button type="button" class="card-action-link" id="viewAllTransactionsBtn">View all</button>
                 </div>
-                
-                <div class="form-group">
-                    <label>Date</label>
-                    <input type="date" id="transactionDate" required>
+                <div id="recentList">
+                    <!-- Populated by loadRecentTransactions() — Home shows only the first ~5 -->
                 </div>
-                
-                <div class="form-group">
-                    <label>Amount</label>
-                    <input type="number" id="amount" step="0.01" placeholder="0.00" required>
-                </div>
-                
-                <div class="form-group autocomplete">
-                    <label>Category</label>
-                    <input type="text" id="category" placeholder="Select or type category..." autocomplete="off" required>
-                    <div class="autocomplete-list" id="categoryList"></div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Description (optional)</label>
-                    <textarea id="description" placeholder="What did you buy?"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>Payee</label>
-                    <input type="text" id="payee" placeholder="Store or vendor" required>
-                </div>
-                
-                <div class="form-group autocomplete">
-                    <label>Account</label>
-                    <input type="text" id="account" placeholder="Select or type account..." autocomplete="off" required>
-                    <div class="autocomplete-list" id="accountList"></div>
-                </div>
-                
-                <button type="submit" class="submit-btn">Add Transaction</button>
-            </form>
-        </div>
-        
-        <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
-        <div class="goals-card" id="goalsCard">
-            <div class="goals-card-header">
-                <h2 class="goals-heading">Goals</h2>
-                <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
             </div>
             
-            <div class="goals-section" id="installmentsSection">
-                <div class="goals-section-title">Installments</div>
-                <div id="installmentsList"></div>
+            <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
+            <div class="goals-card" id="goalsCard">
+                <div class="goals-card-header">
+                    <h2 class="goals-heading">Goals</h2>
+                    <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
+                </div>
+                
+                <div class="goals-section" id="installmentsSection">
+                    <div class="goals-section-title">Installments</div>
+                    <div id="installmentsList"></div>
+                </div>
+                
+                <div class="goals-section" id="savingsGoalsSection">
+                    <div class="goals-section-title">Savings goals</div>
+                    <div id="savingsGoalsList"></div>
+                </div>
             </div>
-            
-            <div class="goals-section" id="savingsGoalsSection">
-                <div class="goals-section-title">Savings goals</div>
-                <div id="savingsGoalsList"></div>
-            </div>
-        </div>
-        
-        <div class="recent-transactions">
-            <h2 style="font-size: 20px; margin-bottom: 16px;">Recent Transactions</h2>
-            <div id="recentList">
-                <!-- Recent transactions will be shown here -->
-            </div>
-        </div>
-        
-        <div class="tools-footer" id="toolsFooter"></div>
         </div><!-- end #homeTab -->
         
-        <!-- ====== ADD TAB (placeholder for stage 1; built out in stage 4) ====== -->
+        <!-- ====== ADD TAB ====== -->
+        <!-- Stage 3 placed the existing transaction form here. The "this repeats" toggle
+             that combines one-time and recurring entry comes in stage 4. -->
         <div class="tab-pane" id="addTab" data-tab="add">
-            <div class="tab-placeholder">
-                <h2>Add</h2>
-                <p>Transaction entry form will live here.</p>
+            <div class="form-card" id="formCard">
+                <div class="edit-banner">
+                    <span id="editBannerText">Editing transaction</span>
+                    <button type="button" class="edit-banner-cancel" id="cancelEditBtn">Cancel edit</button>
+                </div>
+                <form id="transactionForm">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <div class="type-buttons">
+                            <button type="button" class="type-btn active" data-type="Spending">Spending</button>
+                            <button type="button" class="type-btn" data-type="Income">Income</button>
+                            <button type="button" class="type-btn" data-type="Transfer">Transfer</button>
+                            <button type="button" class="type-btn" data-type="Bills">Bills</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="transactionDate" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" id="amount" step="0.01" placeholder="0.00" required>
+                    </div>
+                    
+                    <div class="form-group autocomplete">
+                        <label>Category</label>
+                        <input type="text" id="category" placeholder="Select or type category..." autocomplete="off" required>
+                        <div class="autocomplete-list" id="categoryList"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Description (optional)</label>
+                        <textarea id="description" placeholder="What did you buy?"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Payee</label>
+                        <input type="text" id="payee" placeholder="Store or vendor" required>
+                    </div>
+                    
+                    <div class="form-group autocomplete">
+                        <label>Account</label>
+                        <input type="text" id="account" placeholder="Select or type account..." autocomplete="off" required>
+                        <div class="autocomplete-list" id="accountList"></div>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">Add Transaction</button>
+                </form>
             </div>
         </div>
         
-        <!-- ====== MORE TAB (placeholder for stage 1; built out in stage 5) ====== -->
+        <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
             <div class="tab-placeholder">
                 <h2>More</h2>
-                <p>Recurring transactions and settings will live here.</p>
+                <p>Recurring transactions, full transaction history, and settings will live here.</p>
             </div>
+            <!-- Tools footer moves here in stage 5; for now it lives at the bottom of the body, hidden. -->
         </div>
     </div>
     

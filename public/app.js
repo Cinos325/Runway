@@ -511,10 +511,20 @@ async function loadRecentTransactions() {
     try {
         const response = await fetch(`${API_URL}/transactions/recent`);
         const transactions = await response.json();
-        displayRecentTransactions(transactions);
+        // Home shows only the first ~5 — quick context, not the full history.
+        // Stage 5 adds a full list to the More tab using the same data.
+        const HOME_LIMIT = 5;
+        const limited = Array.isArray(transactions) ? transactions.slice(0, HOME_LIMIT) : [];
+        displayRecentTransactions(limited);
     } catch (err) {
         console.error('Failed to load recent transactions:', err);
     }
+}
+
+// "View all" link on Home jumps to the More tab where the full history will live (stage 5).
+const viewAllBtn = document.getElementById('viewAllTransactionsBtn');
+if (viewAllBtn) {
+    viewAllBtn.addEventListener('click', () => switchTab('more'));
 }
 
 document.querySelectorAll('.type-btn').forEach(btn => {

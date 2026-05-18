@@ -634,8 +634,41 @@ textarea {
     background: var(--bg-card);
     padding: 24px;
     border-radius: 12px;
-    margin-top: 20px;
     box-shadow: var(--shadow-card);
+}
+
+/* Consistent header row used at the top of cards in the new layout:
+   title on the left, action button/link on the right. */
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.card-heading {
+    font-size: 20px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Subtle text-link-styled button used for "View all" on Home's recent transactions */
+.card-action-link {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-family: inherit;
+    transition: background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.card-action-link:hover {
+    background: var(--accent-bg-soft);
 }
 
 .recent-item {
