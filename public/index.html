@@ -39,9 +39,11 @@
 <body>
     <!-- Persistent header — sits above all tabs, always visible. -->
     <header class="persistent-header" id="persistentHeader">
-        <!-- Month name as a small time-context anchor; replaces the redundant "Finance" title
-             and "Spending Power" label. The label is small and secondary; the number speaks for itself. -->
-        <div class="ph-month" id="phMonth">—</div>
+        <!-- Top row: "Runway" branding on the left, current month on the right. -->
+        <div class="ph-top-row">
+            <div class="ph-brand">Runway</div>
+            <div class="ph-month" id="phMonth">—</div>
+        </div>
         <!-- Tap the spending power to toggle the detailed breakdown -->
         <button type="button" class="ph-amount" id="spendingPowerToggle" aria-expanded="false" aria-controls="phBreakdown" aria-label="Toggle spending power breakdown">
             <span class="ph-amount-value">$<span id="spendingPower">—</span></span>
@@ -50,8 +52,23 @@
         <div class="ph-breakdown" id="phBreakdown" hidden>
             <div id="breakdown"></div>
         </div>
-        <div class="ph-pace-row">
-            <div class="pace-ring" id="paceRing" title="">
+        <!-- Runway bar: horizontal bar showing how your runway compares to days
+             remaining in the month. Calm, single color, no escalating warnings. -->
+        <div class="ph-runway-row">
+            <div class="runway-bar" id="runwayBar" aria-hidden="true">
+                <div class="runway-bar-fill" id="runwayBarFill"></div>
+                <div class="runway-bar-marker" id="runwayBarMarker" title="End of month"></div>
+            </div>
+            <div class="ph-status">
+                <div class="ph-status-line"><span id="phStatusText">—</span></div>
+                <div class="ph-status-sub" id="phStatusSub"></div>
+            </div>
+        </div>
+        <!-- Pace ring elements live here, hidden, so the existing setPaceRing JS
+             continues to function without throwing null references. The visible
+             runway bar is the new representation. -->
+        <div hidden>
+            <div class="pace-ring" id="paceRing">
                 <svg viewBox="0 0 100 100">
                     <circle class="pace-ring-track" cx="50" cy="50" r="42" fill="none" stroke-width="8"/>
                     <circle class="pace-ring-progress" id="paceRingProgress" cx="50" cy="50" r="42"
@@ -65,10 +82,6 @@
                     <div class="pct" id="paceRingPct">—</div>
                     <div id="paceRingLabel">left</div>
                 </div>
-            </div>
-            <div class="ph-status" id="phStatus">
-                <div class="ph-status-line"><span id="phStatusText">—</span></div>
-                <div class="ph-status-sub" id="phStatusSub"></div>
             </div>
         </div>
     </header>

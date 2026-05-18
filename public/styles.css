@@ -162,23 +162,35 @@ body {
    centered via auto-margin on the inner blocks if we want it. For now full-width
    on phones, which is the primary target. */
 
-/* Small month-name label above the spending power, centered.
-   Replaces the previous "Finance" title and "Spending Power" sublabel. */
+/* Top row of the header: "Runway" wordmark on the left, current month on the right.
+   Replaces the centered "Finance" / "Spending Power" labels from earlier stages. */
+.ph-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+}
+
+.ph-brand {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
 .ph-month {
     font-size: 12px;
     color: var(--text-secondary);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    text-align: center;
-    margin-bottom: 6px;
 }
 
-/* The amount is a button so it's tappable to expand the breakdown. Centered now. */
+/* The amount is a button so it's tappable to expand the breakdown. */
 .ph-amount {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     background: transparent;
     border: none;
     padding: 4px 0;
@@ -186,7 +198,7 @@ body {
     color: inherit;
     font-family: inherit;
     width: 100%;
-    text-align: center;
+    text-align: left;
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -211,36 +223,60 @@ body {
     border-top: 1px solid var(--border-divider-soft);
     font-size: 13px;
     color: var(--text-secondary);
-    text-align: center;
 }
 
 .ph-breakdown[hidden] {
     display: none;
 }
 
-/* Bottom row of the header: ring + status text, centered as a unit. */
-.ph-pace-row {
+/* ============================================
+   Runway bar — replaces the pace ring
+   A calm, single-color horizontal bar showing how your runway compares to
+   days remaining in the month. The marker shows month-end. The fill shows
+   how far your spending power extends.
+   ============================================ */
+
+.ph-runway-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
     margin-top: 14px;
 }
 
-.ph-pace-row .pace-ring {
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
+.runway-bar {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    background: var(--bg-track);
+    border-radius: 3px;
+    overflow: visible;  /* allow marker to extend above/below */
 }
 
-.ph-pace-row .pace-ring-center .pct {
-    font-size: 11px;
+.runway-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    width: 0%;
 }
 
-.ph-pace-row .pace-ring-center #paceRingLabel {
-    display: none;  /* in the compact ring, hide the "left" sublabel — it duplicates the status text */
+/* Marker indicates "end of month" — if the fill reaches this point, you have
+   exactly enough runway. Past this point = ahead; before = behind. */
+.runway-bar-marker {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: var(--text-tertiary);
+    border-radius: 1px;
+    transform: translateX(-1px);
+    left: 100%;  /* default end-of-month marker at the right edge; JS may move */
 }
 
+/* Status text below the bar */
 .ph-status {
     display: flex;
     flex-direction: column;

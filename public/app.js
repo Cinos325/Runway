@@ -44,8 +44,67 @@ async function loadSpendingPower() {
         }
         
         updatePaceRing(data);
+        updateRunwayBar(data);
     } catch (err) {
         console.error('Failed to load spending power:', err);
+    }
+}
+
+// Update the runway bar — the visual replacement for the pace ring.
+// Computes "days of runway" = spending_power / (avg daily spend so far).
+// Bar fills to (days_of_runway / days_remaining_in_month), clamped 0..100%.
+// Full bar means you have at least enough runway to reach month-end.
+function updateRunwayBar(data) {
+    const fill = document.getElementById('runwayBarFill');
+    const marker = document.getElementById('runwayBarMarker');
+    const statusText = document.getElementById('phStatusText');
+    const statusSub = document.getElementById('phStatusSub');
+    if (!fill || !statusText) return;
+    
+    const spendingPower = parseFloat(data.spending_power || 0);
+    const spent = parseFloat(data.current_month_spending || 0);
+    
+    const now = new Date();
+    const day = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysRemaining = Math.max(1, daysInMonth - day + 1);  // include today as "available"
+    
+    // Compute days of runway. If you haven't spent anything yet this month, we
+    // can't project a daily rate — fall back to "X days remaining in the month."
+    let daysOfRunway = null;
+    let avgDaily = 0;
+    if (spent > 0 && day >= 1) {
+        avgDaily = spent / day;
+        daysOfRunway = spendingPower / avgDaily;
+    }
+    
+    // The marker is always at 100% (end-of-month). The fill represents how
+    // much of "what you need" your runway covers.
+    marker.style.left = '100%';
+    
+    if (daysOfRunway === null) {
+        // No spending yet — bar shows full (nothing's been used), status is informational
+        fill.style.width = '100%';
+        statusText.textContent = 'Plenty of runway';
+        statusSub.textContent = `${daysRemaining} days left in the month`;
+    } else if (spendingPower <= 0) {
+        fill.style.width = '0%';
+        statusText.textContent = 'Out of runway';
+        statusSub.textContent = `${daysRemaining} days remain at current pace`;
+    } else {
+        // Cap fill at 100% — overshooting end-of-month just means "all good"
+        const coverage = Math.min(1, daysOfRunway / daysRemaining);
+        fill.style.width = (coverage * 100).toFixed(1) + '%';
+        
+        const runwayDays = Math.round(daysOfRunway);
+        if (daysOfRunway >= daysRemaining) {
+            statusText.textContent = `${runwayDays} days of runway`;
+            statusSub.textContent = `${daysRemaining} days left in the month`;
+        } else {
+            const shortBy = daysRemaining - runwayDays;
+            statusText.textContent = `${runwayDays} days of runway`;
+            statusSub.textContent = `${shortBy} day${shortBy === 1 ? '' : 's'} short of month-end at current pace`;
+        }
     }
 }
 
@@ -114,23 +173,9 @@ function setPaceRing(remainingFrac, expectedFrac, pctText, labelText, color) {
     pctEl.textContent = pctText;
     labelEl.textContent = labelText;
     
-    // Update the persistent-header status text alongside the ring.
-    // The status line shows the pace status (e.g. "On pace"); the sub-line
-    // shows the percent remaining for clarity.
-    const statusTextEl = document.getElementById('phStatusText');
-    const statusSubEl = document.getElementById('phStatusSub');
-    if (statusTextEl) {
-        // Capitalize first letter of status word
-        statusTextEl.textContent = labelText.charAt(0).toUpperCase() + labelText.slice(1);
-    }
-    if (statusSubEl) {
-        if (expectedFrac === null) {
-            statusSubEl.textContent = '';
-        } else {
-            const monthRemainingPct = Math.round(expectedFrac * 100);
-            statusSubEl.textContent = `${pctText} left · ${monthRemainingPct}% of month remaining`;
-        }
-    }
+    // Note: the persistent-header status text (phStatusText / phStatusSub) is no
+    // longer updated here. The runway bar's updateRunwayBar() owns that surface
+    // now and writes a calm, days-of-runway message instead of the pace status word.
     
     if (expectedFrac === null) {
         marker.style.display = 'none';
