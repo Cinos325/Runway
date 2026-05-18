@@ -190,7 +190,7 @@ body {
 .ph-amount {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     background: transparent;
     border: none;
     padding: 4px 0;
@@ -198,21 +198,21 @@ body {
     color: inherit;
     font-family: inherit;
     width: 100%;
-    text-align: left;
+    text-align: center;
     -webkit-tap-highlight-color: transparent;
 }
 
 .ph-amount-value {
-    font-size: 52px;
+    font-size: 44px;
     font-weight: 700;
     color: var(--accent);
     line-height: 1;
-    letter-spacing: -1px;
+    letter-spacing: -0.5px;
 }
 
 @media (max-width: 420px) {
     .ph-amount-value {
-        font-size: 44px;
+        font-size: 38px;
     }
 }
 
@@ -223,6 +223,7 @@ body {
     border-top: 1px solid var(--border-divider-soft);
     font-size: 13px;
     color: var(--text-secondary);
+    text-align: center;
 }
 
 .ph-breakdown[hidden] {
@@ -280,6 +281,8 @@ body {
 .ph-status {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    text-align: center;
     min-width: 0;
 }
 
