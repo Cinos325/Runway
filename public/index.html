@@ -37,16 +37,13 @@
     </script>
 </head>
 <body>
-    <!-- Persistent header — sits above all tabs, always visible.
-         The header content was previously inside the Home tab; in stage 2
-         it moved up so spending power is glanceable from any tab. -->
+    <!-- Persistent header — sits above all tabs, always visible. -->
     <header class="persistent-header" id="persistentHeader">
-        <div class="ph-title-row">
-            <div class="ph-title">Finance</div>
-        </div>
+        <!-- Month name as a small time-context anchor; replaces the redundant "Finance" title
+             and "Spending Power" label. The label is small and secondary; the number speaks for itself. -->
+        <div class="ph-month" id="phMonth">—</div>
         <!-- Tap the spending power to toggle the detailed breakdown -->
-        <button type="button" class="ph-amount" id="spendingPowerToggle" aria-expanded="false" aria-controls="phBreakdown">
-            <span class="ph-amount-label">Spending Power</span>
+        <button type="button" class="ph-amount" id="spendingPowerToggle" aria-expanded="false" aria-controls="phBreakdown" aria-label="Toggle spending power breakdown">
             <span class="ph-amount-value">$<span id="spendingPower">—</span></span>
         </button>
         <!-- Breakdown details, hidden by default. Expanded by tapping the amount. -->

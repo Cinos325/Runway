@@ -19,6 +19,13 @@ let currentType = 'Spending';
 let currentBaseline = 0;  // tracked so the edit modal can pre-fill it
 
 async function loadSpendingPower() {
+    // Keep the month label in sync. Cheap, and means if the user has the app
+    // open across midnight on the last day of the month, it'll update on the
+    // next poll without needing a reload.
+    const phMonth = document.getElementById('phMonth');
+    if (phMonth) {
+        phMonth.textContent = new Date().toLocaleString(undefined, { month: 'long' });
+    }
     try {
         const response = await fetch(`${API_URL}/spending-power`);
         const data = await response.json();
