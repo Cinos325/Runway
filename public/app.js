@@ -1234,6 +1234,36 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
     }
 });
 
+// ============================================
+// Bottom navigation: tab switching (stage 1 of redesign)
+// ============================================
+//
+// Tabs are mutually exclusive: only one .tab-pane has .active at a time, and
+// the matching .nav-tab also gets .active. Clicking a nav button switches both.
+// The persistent header (above the tabs) isn't affected by this in later stages —
+// it stays visible regardless of which tab is showing.
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.toggle('active', pane.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.nav-tab').forEach(btn => {
+        const isActive = btn.dataset.target === tabName;
+        btn.classList.toggle('active', isActive);
+        if (isActive) {
+            btn.setAttribute('aria-current', 'page');
+        } else {
+            btn.removeAttribute('aria-current');
+        }
+    });
+    // Scroll to top when changing tabs so the new tab starts fresh
+    window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.target));
+});
+
 loadSpendingPower();
 loadRecentTransactions();
 loadCategories();

@@ -1260,3 +1260,111 @@ textarea {
 .theme-toggle .icon-sun { display: block; }
 [data-theme="dark"] .theme-toggle .icon-moon { display: block; }
 [data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+/* ============================================
+   Tab system (introduced in stage 1 of the bottom-nav redesign)
+   ============================================ */
+
+/* Tabs are mutually exclusive. Only .active is visible. */
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+/* Visual placeholder shown in tabs that don't have content yet (stage 1) */
+.tab-placeholder {
+    background: var(--bg-card);
+    padding: 40px 24px;
+    border-radius: 12px;
+    text-align: center;
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-card);
+}
+
+.tab-placeholder h2 {
+    font-size: 22px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.tab-placeholder p {
+    font-size: 14px;
+}
+
+/* ============================================
+   Bottom navigation
+   ============================================ */
+
+/* The body needs extra bottom padding so content doesn't sit underneath the
+   fixed nav. The nav itself is ~58px tall on most phones, plus safe-area. */
+body {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0));
+}
+
+.bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-divider);
+    /* Respect iOS home indicator: add padding so labels aren't under it */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    /* Subtle shadow lifts the bar visually so it reads as floating */
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .bottom-nav {
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.nav-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 8px 4px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: inherit;
+    transition: color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.nav-tab:hover,
+.nav-tab:active {
+    color: var(--text-primary);
+}
+
+.nav-tab.active {
+    color: var(--accent);
+}
+
+.nav-tab svg {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+}
+
+/* Filled icon for the active tab — small visual reinforcement of "you are here". */
+.nav-tab.active svg {
+    fill: currentColor;
+    fill-opacity: 0.1;
+}
+
+.nav-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+}

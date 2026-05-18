@@ -38,6 +38,11 @@
 </head>
 <body>
     <div class="container">
+        <!-- ====== HOME TAB ====== -->
+        <!-- During Stage 1 of the redesign, the Home tab contains all the existing
+             page content. Subsequent stages will move parts of this into the Add
+             and More tabs. Visibility is controlled by JS adding/removing .active. -->
+        <div class="tab-pane active" id="homeTab" data-tab="home">
         <div class="header">
             <div class="header-top">
                 <h1>Finance</h1>
@@ -172,7 +177,50 @@
         </div>
         
         <div class="tools-footer" id="toolsFooter"></div>
+        </div><!-- end #homeTab -->
+        
+        <!-- ====== ADD TAB (placeholder for stage 1; built out in stage 4) ====== -->
+        <div class="tab-pane" id="addTab" data-tab="add">
+            <div class="tab-placeholder">
+                <h2>Add</h2>
+                <p>Transaction entry form will live here.</p>
+            </div>
+        </div>
+        
+        <!-- ====== MORE TAB (placeholder for stage 1; built out in stage 5) ====== -->
+        <div class="tab-pane" id="moreTab" data-tab="more">
+            <div class="tab-placeholder">
+                <h2>More</h2>
+                <p>Recurring transactions and settings will live here.</p>
+            </div>
+        </div>
     </div>
+    
+    <!-- ====== BOTTOM NAVIGATION ====== -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Primary navigation">
+        <button type="button" class="nav-tab active" data-target="home" aria-current="page">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/>
+            </svg>
+            <span class="nav-label">Home</span>
+        </button>
+        <button type="button" class="nav-tab" data-target="add">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            <span class="nav-label">Add</span>
+        </button>
+        <button type="button" class="nav-tab" data-target="more">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="4" y1="7" x2="20" y2="7"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="17" x2="20" y2="17"/>
+            </svg>
+            <span class="nav-label">More</span>
+        </button>
+    </nav>
 
     <!-- Savings goal create/edit modal -->
     <div class="modal-overlay" id="goalModal">
