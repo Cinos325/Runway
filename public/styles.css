@@ -117,11 +117,10 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-page);
     color: var(--text-primary);
-    padding: 20px;
-    padding-bottom: 100px;
-    padding-top: max(20px, env(safe-area-inset-top));
-    padding-left: max(20px, env(safe-area-inset-left));
-    padding-right: max(20px, env(safe-area-inset-right));
+    /* No top padding — the persistent header has its own safe-area-inset handling.
+       No side padding — the container and header handle their own.
+       Bottom padding accounts for the fixed bottom nav. */
+    padding: 0;
     padding-bottom: max(100px, env(safe-area-inset-bottom));
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: contain;
@@ -135,84 +134,144 @@ body {
 .container {
     max-width: 500px;
     margin: 0 auto;
+    padding: 20px;
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
 }
 
-.header {
+/* ============================================
+   Persistent header (introduced stage 2 of redesign)
+   Sits above all tabs. Spending power dominates; tap to expand breakdown.
+   The pace ring is now smaller and inline with a status text.
+   ============================================ */
+
+.persistent-header {
     background: var(--bg-card);
-    padding: 24px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow-card);
+    /* Respect iOS notch / safe area at the top */
+    padding: max(20px, env(safe-area-inset-top, 0)) 24px 18px 24px;
+    border-bottom: 1px solid var(--border-divider);
+    /* Sticky so it stays at the top when content scrolls under it */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    /* Subtle bottom border substitutes for a shadow that would appear during scroll */
+    box-shadow: 0 1px 0 var(--border-divider);
 }
 
-.header-top {
+/* Inner wrapper not strictly needed — header sits at full width but content is
+   centered via auto-margin on the inner blocks if we want it. For now full-width
+   on phones, which is the primary target. */
+
+.ph-title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 4px;
 }
 
-h1 {
-    font-size: 22px;
-    color: var(--text-primary);
-    margin: 0;
+.ph-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.header-actions {
-    display: flex;
-    gap: 6px;
-}
-
-.balance-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-}
-
-.balance-text {
+/* The amount is a button so it's tappable to expand the breakdown */
+.ph-amount {
     display: flex;
     flex-direction: column;
-    min-width: 0;
-    flex: 1;
+    align-items: flex-start;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    cursor: pointer;
+    color: inherit;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.balance-label {
+.ph-amount-label {
     font-size: 13px;
     color: var(--text-secondary);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
-.balance {
-    font-size: 40px;
+.ph-amount-value {
+    font-size: 52px;
     font-weight: 700;
     color: var(--accent);
-    line-height: 1.1;
-    letter-spacing: -0.5px;
-}
-
-.breakdown {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-divider-soft);
+    line-height: 1;
+    letter-spacing: -1px;
 }
 
 @media (max-width: 420px) {
-    .balance {
-        font-size: 36px;
+    .ph-amount-value {
+        font-size: 44px;
     }
-    .pace-ring {
-        width: 80px;
-        height: 80px;
-    }
-    .pace-ring-center .pct {
-        font-size: 17px;
-    }
+}
+
+/* The detailed breakdown, hidden by default; revealed by tapping the amount.
+   Uses [hidden] attribute for true a11y hiding, no display: none from CSS. */
+.ph-breakdown {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-divider-soft);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.ph-breakdown[hidden] {
+    display: none;
+}
+
+/* Bottom row of the header: ring + status text inline */
+.ph-pace-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.ph-pace-row .pace-ring {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+}
+
+.ph-pace-row .pace-ring-center .pct {
+    font-size: 11px;
+}
+
+.ph-pace-row .pace-ring-center #paceRingLabel {
+    display: none;  /* in the compact ring, hide the "left" sublabel — it duplicates the status text */
+}
+
+.ph-status {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ph-status-line {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.ph-status-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.ph-status-sub:empty {
+    display: none;
 }
 
 /* ============================================

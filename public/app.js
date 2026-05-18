@@ -107,6 +107,24 @@ function setPaceRing(remainingFrac, expectedFrac, pctText, labelText, color) {
     pctEl.textContent = pctText;
     labelEl.textContent = labelText;
     
+    // Update the persistent-header status text alongside the ring.
+    // The status line shows the pace status (e.g. "On pace"); the sub-line
+    // shows the percent remaining for clarity.
+    const statusTextEl = document.getElementById('phStatusText');
+    const statusSubEl = document.getElementById('phStatusSub');
+    if (statusTextEl) {
+        // Capitalize first letter of status word
+        statusTextEl.textContent = labelText.charAt(0).toUpperCase() + labelText.slice(1);
+    }
+    if (statusSubEl) {
+        if (expectedFrac === null) {
+            statusSubEl.textContent = '';
+        } else {
+            const monthRemainingPct = Math.round(expectedFrac * 100);
+            statusSubEl.textContent = `${pctText} left · ${monthRemainingPct}% of month remaining`;
+        }
+    }
+    
     if (expectedFrac === null) {
         marker.style.display = 'none';
         ring.title = '';
@@ -1263,6 +1281,23 @@ function switchTab(tabName) {
 document.querySelectorAll('.nav-tab').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.target));
 });
+
+// Tap the spending power amount to toggle the detailed breakdown.
+// Collapsed by default (per design decision); expanded reveals income/planned/spent math.
+const spToggle = document.getElementById('spendingPowerToggle');
+const phBreakdown = document.getElementById('phBreakdown');
+if (spToggle && phBreakdown) {
+    spToggle.addEventListener('click', () => {
+        const wasHidden = phBreakdown.hasAttribute('hidden');
+        if (wasHidden) {
+            phBreakdown.removeAttribute('hidden');
+            spToggle.setAttribute('aria-expanded', 'true');
+        } else {
+            phBreakdown.setAttribute('hidden', '');
+            spToggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
 
 loadSpendingPower();
 loadRecentTransactions();
