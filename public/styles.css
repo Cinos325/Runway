@@ -408,6 +408,23 @@ select:focus {
     border-color: var(--accent);
 }
 
+/* Override Chrome/Safari's autofill highlight (yellow in light, pale blue in dark).
+   The browser doesn't let us set background directly, so we use a giant inset
+   box-shadow to paint over its default. The -webkit-text-fill-color override
+   keeps our text color too — autofill changes that as well.
+   This is a long-standing browser quirk; the trick below is the standard fix. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    caret-color: var(--text-primary);
+    transition: background-color 9999s ease-out 0s;  /* delays autofill's color transition indefinitely */
+}
+
 textarea {
     resize: vertical;
     min-height: 60px;
@@ -522,175 +539,6 @@ textarea {
     font-weight: 500;
 }
 
-/* ============================================
-   Goals card (installments + savings goals)
-   ============================================ */
-
-.goals-card {
-    background: var(--bg-card);
-    padding: 24px;
-    border-radius: 12px;
-    margin-top: 20px;
-    box-shadow: var(--shadow-card);
-}
-
-/* Hide whole card when both subsections are empty */
-.goals-card.empty {
-    display: none;
-}
-
-.goals-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}
-
-.goals-heading {
-    font-size: 20px;
-    color: var(--text-primary);
-    margin: 0;
-}
-
-.goals-section {
-    margin-bottom: 20px;
-}
-
-.goals-section:last-child {
-    margin-bottom: 0;
-}
-
-.goals-section.empty {
-    display: none;
-}
-
-.goals-section-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border-divider-soft);
-}
-
-/* Per-item styling shared between installments and goals */
-.goal-item,
-.installment-item {
-    padding: 14px 0;
-    border-bottom: 1px solid var(--border-divider-soft);
-    cursor: default;
-}
-
-.goal-item {
-    cursor: pointer;  /* tap to edit */
-}
-
-.goal-item:last-child,
-.installment-item:last-child {
-    border-bottom: none;
-}
-
-.goal-item-header,
-.installment-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
-    gap: 8px;
-}
-
-.goal-name,
-.installment-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.goal-amount,
-.installment-amount {
-    font-size: 13px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-/* Progress bar — used by both */
-.installment-progress-bar,
-.goal-progress-bar {
-    width: 100%;
-    height: 8px;
-    background: var(--bg-track);
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-    margin-bottom: 6px;
-}
-
-.installment-progress-fill,
-.goal-progress-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 4px;
-    transition: width 0.4s ease, background 0.3s ease;
-}
-
-/* Installments get pace-aware coloring; savings goals stay positive */
-.installment-progress-fill.ahead { background: var(--success); }
-.installment-progress-fill.behind { background: var(--warning); }
-.installment-progress-fill.late { background: var(--danger); }
-.goal-progress-fill.complete { background: var(--success); }
-
-.installment-pace-marker {
-    position: absolute;
-    top: -2px;
-    bottom: -2px;
-    width: 2px;
-    background: var(--text-tertiary);
-    opacity: 0.5;
-}
-
-.installment-meta,
-.goal-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--text-secondary);
-}
-
-.installment-status {
-    font-weight: 500;
-}
-
-.installment-status.ahead { color: var(--success); }
-.installment-status.on-pace { color: var(--accent); }
-.installment-status.behind { color: var(--warning); }
-.installment-status.late { color: var(--danger); }
-
-.goal-pct {
-    font-weight: 500;
-    color: var(--accent);
-}
-
-.goal-pct.complete {
-    color: var(--success);
-}
-
-/* Danger button variant for modal-btn-cancel */
-.modal-btn-cancel.danger {
-    color: var(--danger);
-}
-
-.goal-empty-state {
-    font-size: 13px;
-    color: var(--text-secondary);
-    padding: 8px 0;
-    font-style: italic;
-}
 /* ============================================
    Recent transactions list
    ============================================ */
@@ -1074,22 +922,190 @@ textarea {
     padding: 24px 8px;
 }
 
-.installments-block {
-    border-top: 1px solid var(--border-divider-soft);
-    padding-top: 12px;
-    margin-top: 12px;
+/* ============================================
+   Goals card (installments + savings goals)
+   ============================================ */
+
+.goals-card {
+    background: var(--bg-card);
+    padding: 24px;
+    border-radius: 12px;
+    margin-top: 20px;
+    box-shadow: var(--shadow-card);
 }
 
-.installments-help {
-    font-size: 12px;
+/* Hide whole card when both subsections are empty (toggled by JS) */
+.goals-card.empty {
+    display: none;
+}
+
+.goals-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.goals-heading {
+    font-size: 20px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.goals-section {
+    margin-bottom: 20px;
+}
+
+.goals-section:last-child {
+    margin-bottom: 0;
+}
+
+.goals-section.empty {
+    display: none;
+}
+
+.goals-section-title {
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-divider-soft);
 }
 
-.installment-preview {
+/* Per-item styling shared between installments and savings goals */
+.goal-item,
+.installment-item {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-divider-soft);
+    cursor: default;
+}
+
+.goal-item {
+    cursor: pointer;  /* tap to edit */
+}
+
+.goal-item:last-child,
+.installment-item:last-child {
+    border-bottom: none;
+}
+
+.goal-item-header,
+.installment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    gap: 8px;
+}
+
+.goal-name,
+.installment-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.goal-amount,
+.installment-amount {
     font-size: 13px;
     color: var(--text-secondary);
-    padding-bottom: 14px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Progress bar — used by both */
+.installment-progress-bar,
+.goal-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-track);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 6px;
+}
+
+.installment-progress-fill,
+.goal-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.4s ease, background 0.3s ease;
+}
+
+/* Installments get pace-aware coloring; savings goals stay positive */
+.installment-progress-fill.ahead { background: var(--success); }
+.installment-progress-fill.behind { background: var(--warning); }
+.installment-progress-fill.late { background: var(--danger); }
+.goal-progress-fill.complete { background: var(--success); }
+
+.installment-pace-marker {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--text-tertiary);
+    opacity: 0.5;
+}
+
+.installment-meta,
+.goal-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.installment-status {
+    font-weight: 500;
+}
+
+.installment-status.ahead { color: var(--success); }
+.installment-status.on-pace { color: var(--accent); }
+.installment-status.behind { color: var(--warning); }
+.installment-status.late { color: var(--danger); }
+
+.goal-pct {
+    font-weight: 500;
+    color: var(--accent);
+}
+
+.goal-pct.complete {
+    color: var(--success);
+}
+
+/* Danger variant for cancel-style buttons (e.g. Delete goal) */
+.modal-btn-cancel.danger {
+    color: var(--danger);
+}
+
+/* Friendly empty-state message inside each subsection */
+.goal-empty-state {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 8px 0;
+    font-style: italic;
+}
+
+/* Computed end-date preview shown under the Number of payments input */
+.num-payments-preview {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: -12px;
+    margin-bottom: 16px;
+    font-style: italic;
+    min-height: 16px;
+}
+
+.num-payments-preview:empty {
+    margin: 0;
+    min-height: 0;
 }
 
 /* ============================================

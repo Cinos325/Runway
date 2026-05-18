@@ -23,8 +23,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <link rel="stylesheet" href="/styles.css">
     
-    <!-- Apply theme before paint to avoid a light-mode flash on dark-mode users.
-         This script must be inline and BEFORE the body so it runs before any rendering. -->
+    <!-- Apply theme before paint to avoid a light-mode flash on dark-mode users. -->
     <script>
         (function() {
             const saved = localStorage.getItem('theme');
@@ -109,6 +108,11 @@
                         <button type="button" class="type-btn" data-type="Transfer">Transfer</button>
                         <button type="button" class="type-btn" data-type="Bills">Bills</button>
                     </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="transactionDate" required>
                 </div>
                 
                 <div class="form-group">
@@ -289,13 +293,15 @@
                         <input type="text" id="recPayee">
                     </div>
                     <div class="form-row-inline">
-                        <div class="form-group">
+                        <div class="form-group autocomplete">
                             <label>Category</label>
-                            <input type="text" id="recCategory">
+                            <input type="text" id="recCategory" autocomplete="off">
+                            <div class="autocomplete-list" id="recCategoryList"></div>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group autocomplete">
                             <label>Account</label>
-                            <input type="text" id="recAccount">
+                            <input type="text" id="recAccount" autocomplete="off">
+                            <div class="autocomplete-list" id="recAccountList"></div>
                         </div>
                     </div>
                     <div class="form-row-inline">
@@ -319,38 +325,14 @@
                             <input type="date" id="recStartDate">
                         </div>
                         <div class="form-group">
-                            <label>End date (optional)</label>
-                            <input type="date" id="recEndDate">
+                            <label>Number of payments (optional)</label>
+                            <input type="number" id="recNumPayments" min="2" placeholder="e.g. 6">
                         </div>
                     </div>
+                    <div id="recEndDatePreview" class="num-payments-preview"></div>
                     <div class="form-group">
                         <label>Description (optional)</label>
                         <input type="text" id="recDescription">
-                    </div>
-
-                    <!-- Installments shortcut, only shown when adding -->
-                    <div id="installmentsBlock" class="installments-block">
-                        <div class="toggle-row">
-                            <button type="button" class="toggle-button" id="installmentsToggle" aria-pressed="false">
-                                <span class="toggle-icon">✓</span>
-                                <span>Split a one-time purchase into installments</span>
-                            </button>
-                        </div>
-                        <div id="installmentsFields" style="display: none;">
-                            <p class="installments-help">
-                                Enter the <strong>total purchase amount</strong> in the Amount field above and the
-                                <strong>first payment date</strong> in Start date. The per-payment amount and end date will be computed on save.
-                            </p>
-                            <div class="form-row-inline">
-                                <div class="form-group">
-                                    <label>Number of payments</label>
-                                    <input type="number" id="installmentCount" min="2" placeholder="e.g. 6">
-                                </div>
-                                <div class="form-group" style="display: flex; align-items: end;">
-                                    <div class="installment-preview" id="installmentPreview"></div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                     
                     <div class="toggle-row" id="payTodayRow">

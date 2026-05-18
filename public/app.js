@@ -161,6 +161,8 @@ async function loadCategories() {
         const response = await fetch(`${API_URL}/categories`);
         const categories = await response.json();
         setupAutocomplete('category', 'categoryList', categories);
+        // Same suggestions in the recurring transaction modal
+        setupAutocomplete('recCategory', 'recCategoryList', categories);
     } catch (err) {
         console.error('Failed to load categories:', err);
     }
@@ -171,6 +173,8 @@ async function loadAccounts() {
         const response = await fetch(`${API_URL}/accounts`);
         const accounts = await response.json();
         setupAutocomplete('account', 'accountList', accounts);
+        // Same suggestions in the recurring transaction modal
+        setupAutocomplete('recAccount', 'recAccountList', accounts);
     } catch (err) {
         console.error('Failed to load accounts:', err);
     }
@@ -190,22 +194,9 @@ async function loadGoals() {
     renderInstallments(installments);
     renderSavingsGoals(savingsGoals);
     
-    // Card is always visible so you can add goals even when there are none yet
-    const card = document.getElementById('goalsCard');
-    card.classList.remove('empty');
-
-    // Show a friendly empty-state message under "Savings goals" if there are none.
-    // Installments are auto-detected so a different message there:
-    const installmentsList = document.getElementById('installmentsList');
-    const savingsGoalsList = document.getElementById('savingsGoalsList');
-    if (installments.length === 0) {
-        installmentsList.innerHTML = '<div class="goal-empty-state">No installment plans detected. Add a Spending-type recurring transaction with an end date to track one here.</div>';
-        document.getElementById('installmentsSection').classList.remove('empty');
-    }
-    if (savingsGoals.length === 0) {
-        savingsGoalsList.innerHTML = '<div class="goal-empty-state">No savings goals yet. Click + New goal above to create one.</div>';
-        document.getElementById('savingsGoalsSection').classList.remove('empty');
-    }
+    // The card is always visible — even with no installments or savings goals —
+    // so the "+ New goal" button is always discoverable.
+    document.getElementById('goalsCard').classList.remove('empty');
 }
 
 async function fetchJSON(url) {
@@ -217,11 +208,11 @@ async function fetchJSON(url) {
 function renderInstallments(items) {
     const section = document.getElementById('installmentsSection');
     const list = document.getElementById('installmentsList');
+    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        section.classList.add('empty');
+        list.innerHTML = '<div class="goal-empty-state">No installment plans detected. Add a Spending-type recurring transaction with a number of payments to track one here.</div>';
         return;
     }
-    section.classList.remove('empty');
     list.innerHTML = items.map(renderInstallment).join('');
 }
 
@@ -269,11 +260,11 @@ function renderInstallment(it) {
 function renderSavingsGoals(items) {
     const section = document.getElementById('savingsGoalsSection');
     const list = document.getElementById('savingsGoalsList');
+    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        section.classList.add('empty');
+        list.innerHTML = '<div class="goal-empty-state">No savings goals yet. Click + New goal above to create one.</div>';
         return;
     }
-    section.classList.remove('empty');
     list.innerHTML = items.map(renderSavingsGoal).join('');
 }
 
@@ -466,9 +457,17 @@ document.querySelectorAll('.type-btn').forEach(btn => {
 
 // ===== Edit mode state and helpers =====
 let editingTransactionId = null;
-let editingOriginalDate = null;  // preserved when editing so we can update without losing original date
+let editingOriginalDate = null;  // preserved so we can show "Editing transaction from YYYY-MM-DD" in the banner
 const formCard = document.getElementById('formCard');
 const editBannerText = document.getElementById('editBannerText');
+const transactionDateInput = document.getElementById('transactionDate');
+
+function todayString() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+// Initialize the date input to today on every page load
+transactionDateInput.value = todayString();
 
 function setTypeButton(type) {
     document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
@@ -483,6 +482,7 @@ function enterEditMode(t) {
     
     // Pre-fill form fields
     setTypeButton(t.type);
+    transactionDateInput.value = editingOriginalDate;
     document.getElementById('amount').value = parseFloat(t.amount).toFixed(2);
     document.getElementById('category').value = t.category || '';
     document.getElementById('description').value = t.description || '';
@@ -507,6 +507,8 @@ function exitEditMode() {
     const form = document.getElementById('transactionForm');
     form.reset();
     setTypeButton('Spending');
+    // form.reset() clears the date input too, so restore today
+    transactionDateInput.value = todayString();
     const submitBtn = document.querySelector('.submit-btn');
     submitBtn.textContent = 'Add Transaction';
 }
@@ -523,11 +525,10 @@ document.getElementById('transactionForm').addEventListener('submit', async func
     submitBtn.disabled = true;
     
     const transaction = {
-        // For new transactions, use today; for edits, preserve the original date.
-        // (To let the user change the date during edit, expose a date input — not done here.)
-        transaction_date: isEditing
-            ? editingOriginalDate
-            : new Date().toISOString().split('T')[0],
+        // Use the form's date input. Defaults to today on page load and after each
+        // add, but the user can change it to forward-date (upcoming paychecks) or
+        // backfill old transactions.
+        transaction_date: transactionDateInput.value,
         type: currentType,
         amount: parseFloat(document.getElementById('amount').value),
         category: document.getElementById('category').value,
@@ -568,6 +569,8 @@ document.getElementById('transactionForm').addEventListener('submit', async func
         } else {
             this.reset();
             setTypeButton('Spending');
+            // form.reset() clears the date too; restore today as a sensible default
+            transactionDateInput.value = todayString();
         }
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -908,17 +911,16 @@ recurringList.addEventListener('click', async (e) => {
 });
 
 // ===== Add/edit form =====
-const installmentsToggle = document.getElementById('installmentsToggle');
-const installmentsFields = document.getElementById('installmentsFields');
-const installmentsBlock = document.getElementById('installmentsBlock');
-const installmentCount = document.getElementById('installmentCount');
-const installmentPreview = document.getElementById('installmentPreview');
+const recNumPaymentsInput = document.getElementById('recNumPayments');
+const recEndDatePreview = document.getElementById('recEndDatePreview');
 const recActiveRow = document.getElementById('recActiveRow');
 const recAmountInput = document.getElementById('recAmount');
 const payTodayToggle = document.getElementById('payTodayToggle');
 const payTodayRow = document.getElementById('payTodayRow');
 const recIsActiveBtn = document.getElementById('recIsActive');
 const recTypeSelect = document.getElementById('recType');
+const recStartDateInput = document.getElementById('recStartDate');
+const recFrequencySelect = document.getElementById('recFrequency');
 
 // Toggle button helpers (these replace native checkbox behavior)
 function isToggled(btn) {
@@ -931,12 +933,6 @@ function setToggled(btn, on) {
 // Click handlers — make the buttons flip on click
 payTodayToggle.addEventListener('click', () => setToggled(payTodayToggle, !isToggled(payTodayToggle)));
 recIsActiveBtn.addEventListener('click', () => setToggled(recIsActiveBtn, !isToggled(recIsActiveBtn)));
-installmentsToggle.addEventListener('click', () => {
-    const newState = !isToggled(installmentsToggle);
-    setToggled(installmentsToggle, newState);
-    installmentsFields.style.display = newState ? '' : 'none';
-    updateInstallmentPreview();
-});
 
 // Default the "pay today" toggle based on type: on for Spending, off for everything else
 function syncPayTodayDefault() {
@@ -963,14 +959,10 @@ function clearRecurringForm() {
     document.getElementById('recDescription').value = '';
     document.getElementById('recFrequency').value = 'monthly';
     document.getElementById('recDayOfMonth').value = '';
-    document.getElementById('recStartDate').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('recEndDate').value = '';
+    recStartDateInput.value = todayString();
+    recNumPaymentsInput.value = '';
+    recEndDatePreview.textContent = '';
     setToggled(recIsActiveBtn, true);
-    installmentsToggle.classList.remove('active');
-    installmentsToggle.setAttribute('aria-pressed', 'false');
-    installmentsFields.style.display = 'none';
-    installmentCount.value = '';
-    installmentPreview.textContent = '';
     setToggled(payTodayToggle, false);
 }
 
@@ -978,7 +970,6 @@ function openRecurringFormForAdd() {
     editingRecurringId = null;
     clearRecurringForm();
     document.getElementById('recurringFormTitle').textContent = 'Add recurring transaction';
-    installmentsBlock.style.display = '';
     recActiveRow.style.display = 'none';
     payTodayRow.style.display = '';  // show the "pay today" option only when adding
     syncPayTodayDefault();
@@ -998,35 +989,33 @@ function openRecurringFormForEdit(item) {
     document.getElementById('recDescription').value = item.description || '';
     document.getElementById('recFrequency').value = item.frequency;
     document.getElementById('recDayOfMonth').value = item.day_of_month || '';
-    document.getElementById('recStartDate').value = item.start_date ? item.start_date.slice(0, 10) : '';
-    document.getElementById('recEndDate').value = item.end_date ? item.end_date.slice(0, 10) : '';
+    recStartDateInput.value = item.start_date ? item.start_date.slice(0, 10) : '';
+    // Derive "number of payments" from the existing end_date for display.
+    if (item.end_date) {
+        recNumPaymentsInput.value = computeNumPaymentsFromEndDate(
+            item.start_date.slice(0, 10),
+            item.end_date.slice(0, 10),
+            item.frequency
+        );
+    } else {
+        recNumPaymentsInput.value = '';
+    }
+    updateEndDatePreview();
     setToggled(recIsActiveBtn, !!item.is_active);
-    installmentsBlock.style.display = 'none';
     recActiveRow.style.display = '';
     payTodayRow.style.display = 'none';  // can't retroactively pay today on edit
     showRecurringForm();
 }
 
-// Installment live preview
-function updateInstallmentPreview() {
-    if (!isToggled(installmentsToggle)) {
-        installmentPreview.textContent = '';
-        return;
-    }
-    const total = parseFloat(recAmountInput.value);
-    const n = parseInt(installmentCount.value, 10);
-    if (isNaN(total) || isNaN(n) || n < 2 || total <= 0) {
-        installmentPreview.textContent = '';
-        return;
-    }
-    const per = (total / n).toFixed(2);
-    installmentPreview.textContent = `$${per} × ${n} payments`;
-}
-recAmountInput.addEventListener('input', updateInstallmentPreview);
-installmentCount.addEventListener('input', updateInstallmentPreview);
+// ===== End-date computation from "number of payments" =====
+//
+// The user inputs "Number of payments" (e.g. 6); the system computes the
+// end_date as start_date + (N-1) periods. The frequency determines the period.
+// This is intentionally inclusive: N payments means N occurrences of the
+// recurring entry, the first on start_date, the last on end_date.
 
-// After N payments, end_date = start + (N-1) * period.
-function computeInstallmentEndDate(startDateStr, frequency, n) {
+function computeEndDateFromNumPayments(startDateStr, frequency, n) {
+    if (!startDateStr || isNaN(n) || n < 1) return null;
     const d = new Date(startDateStr + 'T00:00:00');
     const periods = n - 1;
     if (frequency === 'monthly') {
@@ -1041,8 +1030,67 @@ function computeInstallmentEndDate(startDateStr, frequency, n) {
     return d.toISOString().slice(0, 10);
 }
 
+// Reverse direction: given a known start/end_date and frequency, compute the
+// implied number of payments. Used to pre-fill the field when editing.
+function computeNumPaymentsFromEndDate(startDateStr, endDateStr, frequency) {
+    if (!startDateStr || !endDateStr) return '';
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T00:00:00');
+    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return '';
+    if (frequency === 'weekly') return Math.round(diffDays / 7) + 1;
+    if (frequency === 'biweekly') return Math.round(diffDays / 14) + 1;
+    if (frequency === 'yearly') {
+        return (end.getFullYear() - start.getFullYear()) + 1;
+    }
+    // monthly: count months between dates
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    return months + 1;
+}
+
+// Live preview: when the user types a number of payments or changes the start
+// date / frequency, show "= ends YYYY-MM-DD" so they can verify the result.
+function updateEndDatePreview() {
+    const n = parseInt(recNumPaymentsInput.value, 10);
+    const amount = parseFloat(recAmountInput.value);
+    const startStr = recStartDateInput.value;
+    const freq = recFrequencySelect.value;
+    if (isNaN(n) || n < 1 || !startStr) {
+        recEndDatePreview.textContent = '';
+        return;
+    }
+    const end = computeEndDateFromNumPayments(startStr, freq, n);
+    const paymentsWord = `payment${n === 1 ? '' : 's'}`;
+    // Include a "total over N payments" math-check when amount is set.
+    // Amount represents the per-payment value (consistent with how amount
+    // works everywhere else in the app); this preview helps users verify
+    // their per-payment division when entering a "split a big purchase" entry.
+    if (!isNaN(amount) && amount > 0) {
+        const total = (amount * n).toFixed(2);
+        recEndDatePreview.textContent = `= ends ${end} • ${n} ${paymentsWord} totaling $${total}`;
+    } else {
+        recEndDatePreview.textContent = `= ends ${end} (${n} ${paymentsWord})`;
+    }
+}
+
+recNumPaymentsInput.addEventListener('input', updateEndDatePreview);
+recAmountInput.addEventListener('input', updateEndDatePreview);
+recStartDateInput.addEventListener('input', updateEndDatePreview);
+recFrequencySelect.addEventListener('change', updateEndDatePreview);
+
 document.getElementById('recurringFormSaveBtn').addEventListener('click', async () => {
     const saveBtn = document.getElementById('recurringFormSaveBtn');
+    
+    // Resolve end_date from the "Number of payments" input.
+    // Empty/0/1 means "no end date" — recurring continues indefinitely.
+    const numPaymentsRaw = recNumPaymentsInput.value.trim();
+    const numPayments = numPaymentsRaw ? parseInt(numPaymentsRaw, 10) : null;
+    const startDate = recStartDateInput.value;
+    const frequency = document.getElementById('recFrequency').value;
+    let endDate = null;
+    if (numPayments && numPayments >= 1 && startDate) {
+        endDate = computeEndDateFromNumPayments(startDate, frequency, numPayments);
+    }
     
     const payload = {
         name: document.getElementById('recName').value.trim(),
@@ -1052,32 +1100,13 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
         amount: parseFloat(recAmountInput.value),
         account: document.getElementById('recAccount').value.trim() || null,
         description: document.getElementById('recDescription').value.trim() || null,
-        frequency: document.getElementById('recFrequency').value,
+        frequency,
         day_of_month: document.getElementById('recDayOfMonth').value || null,
-        start_date: document.getElementById('recStartDate').value,
-        end_date: document.getElementById('recEndDate').value || null,
+        start_date: startDate,
+        end_date: endDate,
         // Only meaningful when adding; ignored on PUT
         create_first_payment_today: editingRecurringId === null && isToggled(payTodayToggle),
     };
-    
-    // Apply installment logic if toggled (only valid when adding)
-    if (editingRecurringId === null && isToggled(installmentsToggle)) {
-        const n = parseInt(installmentCount.value, 10);
-        if (isNaN(n) || n < 2) {
-            alert('Number of installments must be 2 or more.');
-            return;
-        }
-        if (isNaN(payload.amount) || payload.amount <= 0) {
-            alert('Enter the total purchase amount in Amount.');
-            return;
-        }
-        if (!payload.start_date) {
-            alert('Enter a start date (the first payment date).');
-            return;
-        }
-        payload.amount = parseFloat((payload.amount / n).toFixed(2));
-        payload.end_date = computeInstallmentEndDate(payload.start_date, payload.frequency, n);
-    }
     
     if (editingRecurringId !== null) {
         payload.is_active = isToggled(recIsActiveBtn);
