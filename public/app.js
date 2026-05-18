@@ -675,7 +675,7 @@ function displayRecentTransactions(transactions) {
             <div class="recent-item-content">
                 <div>
                     <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}</div>
-                    <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date}</div>
+                    <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date.slice(0, 10)}</div>
                 </div>
                 <div style="display: flex; align-items: center;">
                     <div class="recent-amount ${t.type === 'Income' ? 'income' : 'spending'}">
