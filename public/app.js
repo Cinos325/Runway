@@ -97,15 +97,26 @@ function updateRunwayBar(data) {
         fill.style.width = (coverage * 100).toFixed(1) + '%';
         
         const runwayDays = Math.round(daysOfRunway);
+        // Grounding the runway days in the actual daily rate makes the number
+        // less abstract — "17 days of runway ($28 average per day)" tells you
+        // both the headline and the implicit math behind it.
+        const avgFormatted = formatAvgDaily(avgDaily);
+        statusText.textContent = `${runwayDays} days of runway (${avgFormatted} avg/day)`;
         if (daysOfRunway >= daysRemaining) {
-            statusText.textContent = `${runwayDays} days of runway`;
             statusSub.textContent = `${daysRemaining} days left in the month`;
         } else {
             const shortBy = daysRemaining - runwayDays;
-            statusText.textContent = `${runwayDays} days of runway`;
             statusSub.textContent = `${shortBy} day${shortBy === 1 ? '' : 's'} short of month-end at current pace`;
         }
     }
+}
+
+// Format a daily average. Whole-number dollars when >= $10/day, two decimals when small.
+function formatAvgDaily(avg) {
+    if (avg >= 10) {
+        return '$' + Math.round(avg);
+    }
+    return '$' + avg.toFixed(2);
 }
 
 // Update the pace ring based on spending-power data.
