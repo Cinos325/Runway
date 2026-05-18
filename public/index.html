@@ -186,6 +186,52 @@
                         <div class="autocomplete-list" id="accountList"></div>
                     </div>
                     
+                    <!-- This repeats: turning this on converts the entry into a recurring template
+                         instead of (or in addition to) a single transaction. Hidden when type=Transfer. -->
+                    <div class="form-repeats-divider" id="repeatsRow">
+                        <button type="button" class="toggle-button" id="repeatsToggle" aria-pressed="false" aria-controls="repeatsFields">
+                            <span class="toggle-icon">✓</span>
+                            <span>This repeats</span>
+                        </button>
+                    </div>
+                    
+                    <div class="repeats-fields" id="repeatsFields" hidden>
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" id="repName" placeholder="e.g. Netflix monthly">
+                            <div class="field-hint">Auto-filled from payee + frequency; edit if you want a different label.</div>
+                        </div>
+                        
+                        <div class="form-row-inline">
+                            <div class="form-group">
+                                <label>Frequency</label>
+                                <select id="repFrequency">
+                                    <option value="monthly">Monthly</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="biweekly">Biweekly</option>
+                                    <option value="yearly">Yearly</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Day of month (optional)</label>
+                                <input type="number" id="repDayOfMonth" min="1" max="31" placeholder="—">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Number of payments (optional)</label>
+                            <input type="number" id="repNumPayments" min="1" placeholder="leave blank for indefinite">
+                            <div class="field-hint" id="repEndPreview"></div>
+                        </div>
+                        
+                        <div class="toggle-row" id="addPayTodayRow">
+                            <button type="button" class="toggle-button" id="addPayTodayToggle" aria-pressed="false">
+                                <span class="toggle-icon">✓</span>
+                                <span>Also record today's payment</span>
+                            </button>
+                        </div>
+                    </div>
+                    
                     <button type="submit" class="submit-btn">Add Transaction</button>
                 </form>
             </div>

@@ -1488,3 +1488,44 @@ body {
     font-weight: 500;
     letter-spacing: 0.2px;
 }
+
+/* ============================================
+   "This repeats" section in the Add form (stage 4)
+   ============================================ */
+
+/* Divider + toggle row between regular fields and the conditional repeats section */
+.form-repeats-divider {
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-divider-soft);
+    margin-bottom: 16px;
+}
+
+/* Hidden when its parent (the row) has [hidden]; uses native [hidden] attribute */
+.form-repeats-divider[hidden] {
+    display: none;
+}
+
+/* The collapsible fields section. [hidden] attribute hides cleanly. */
+.repeats-fields {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: var(--bg-button-secondary);
+    border-radius: 8px;
+}
+
+.repeats-fields[hidden] {
+    display: none;
+}
+
+/* Small hint text under inputs (e.g. "auto-filled from payee + frequency") */
+.field-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+.field-hint:empty {
+    display: none;
+}
