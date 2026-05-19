@@ -495,25 +495,37 @@ document.getElementById('goalDeleteBtn').addEventListener('click', async () => {
 
 document.getElementById('goalMarkCompleteBtn').addEventListener('click', async () => {
     if (editingGoalId === null) return;
-    const today = new Date().toISOString().slice(0, 10);
+    // Calls the dedicated /complete endpoint which:
+    //   - creates a GoalRelease transaction for the saved amount (adds to spending power)
+    //   - marks the goal complete (sets completed_at, is_active=false)
+    //   - deactivates any matching recurring template (so future contributions stop)
+    // All atomic — if any step fails, none are applied.
+    if (!confirm('Mark this goal complete? This will release the saved amount back into spending power and stop any recurring contributions.')) return;
     try {
-        const resp = await fetch(`${API_URL}/goals/${editingGoalId}`, {
-            method: 'PUT',
+        const resp = await fetch(`${API_URL}/goals/${editingGoalId}/complete`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: goalNameInput.value.trim(),
-                target_amount: parseFloat(goalTargetInput.value),
-                match_category: goalCategoryInput.value.trim(),
-                notes: goalNotesInput.value.trim() || null,
-                is_active: false,
-                completed_at: today,
-            }),
         });
-        if (!resp.ok) throw new Error('Update failed');
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Update failed');
+        }
+        const result = await resp.json();
         goalModal.classList.remove('active');
         await loadGoals();
+        await loadSpendingPower();
+        await loadRecentTransactions();
+        await loadTopCategories();
+        // If a release was created, show a confirmatory message
+        if (result.released) {
+            const successMsg = document.getElementById('successMsg');
+            successMsg.textContent = `Goal complete — $${parseFloat(result.released_amount).toFixed(2)} released`;
+            successMsg.hidden = false;
+            successMsg.classList.add('show');
+            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
+        }
     } catch (err) {
-        alert('Failed to mark complete.');
+        alert('Failed to mark complete: ' + err.message);
         console.error(err);
     }
 });
@@ -902,12 +914,12 @@ function displayRecentTransactions(transactions) {
             <div class="recent-item-delete-bg" data-action="confirm-delete" data-id="${t.id}">Delete</div>
             <div class="recent-item-content">
                 <div>
-                    <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}</div>
+                    <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}${transactionBadge(t.type)}</div>
                     <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date.slice(0, 10)}</div>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <div class="recent-amount ${t.type === 'Income' ? 'income' : 'spending'}">
-                        ${t.type === 'Income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                    <div class="recent-amount ${recentAmountVariant(t.type)}">
+                        ${amountSign(t.type)}${parseFloat(t.amount).toFixed(2)}
                     </div>
                     <button type="button" class="recent-item-edit-btn" data-action="edit" data-id="${t.id}" aria-label="Edit" title="Edit">✎</button>
                     <button type="button" class="recent-item-delete-btn" data-action="confirm-delete" data-id="${t.id}" aria-label="Delete" title="Delete">×</button>
@@ -1136,6 +1148,34 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[c]);
+}
+
+// Transaction type semantics for display:
+//   Income, GoalRelease → "incoming" — money flowing into spending power (green-ish, + sign)
+//   Spending, Savings, Bills → "outgoing" — money out of spending power (- sign)
+//   Transfer → neutral (just a movement, doesn't affect spending power)
+function isIncomingType(type) {
+    return type === 'Income' || type === 'GoalRelease';
+}
+
+// Visual variant of the recent-amount cell for a given transaction type
+function recentAmountVariant(type) {
+    if (isIncomingType(type)) return 'income';
+    if (type === 'Transfer') return 'neutral';
+    return 'spending';
+}
+
+// The +/- sign prefix
+function amountSign(type) {
+    return isIncomingType(type) ? '+' : '-';
+}
+
+// A small badge HTML for unusual transaction types (e.g. GoalRelease)
+function transactionBadge(type) {
+    if (type === 'GoalRelease') {
+        return ' <span class="txn-badge txn-badge-release">goal release</span>';
+    }
+    return '';
 }
 
 async function loadRecurringList() {
@@ -1753,12 +1793,12 @@ async function loadMoreTransactionsList() {
                 <div class="recent-item-delete-bg" data-action="confirm-delete" data-id="${t.id}">Delete</div>
                 <div class="recent-item-content">
                     <div>
-                        <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}</div>
+                        <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}${transactionBadge(t.type)}</div>
                         <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date.slice(0, 10)}</div>
                     </div>
                     <div style="display: flex; align-items: center;">
-                        <div class="recent-amount ${t.type === 'Income' ? 'income' : 'spending'}">
-                            ${t.type === 'Income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                        <div class="recent-amount ${recentAmountVariant(t.type)}">
+                            ${amountSign(t.type)}${parseFloat(t.amount).toFixed(2)}
                         </div>
                         <button type="button" class="recent-item-edit-btn" data-action="edit" data-id="${t.id}" aria-label="Edit" title="Edit">✎</button>
                         <button type="button" class="recent-item-delete-btn" data-action="confirm-delete" data-id="${t.id}" aria-label="Delete" title="Delete">×</button>

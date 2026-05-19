@@ -234,9 +234,86 @@ app.delete('/api/goals/:id', async (req, res) => {
   }
 });
 
+// Mark a goal complete. Atomically:
+//   1. Reads the goal's current amount_saved (from the savings_goal_progress view)
+//   2. Inserts a GoalRelease transaction for that amount, dated today, matching the goal's category
+//   3. Sets the goal's completed_at and is_active=false
+//   4. Deactivates any matching recurring transaction (same category, type='Savings')
+// If any step fails, the whole thing rolls back.
+//
+// The GoalRelease transaction is positive: it adds to spending power, offsetting
+// the user's actual purchase. See migrations/2026-05-19-goal-release.sql for the
+// view definitions that use this.
+app.post('/api/goals/:id/complete', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Look up the goal and its current saved amount
+    const goalQ = await client.query(
+      `SELECT g.id, g.name, g.match_category, sgp.amount_saved
+       FROM savings_goals g
+       LEFT JOIN savings_goal_progress sgp ON sgp.id = g.id
+       WHERE g.id = $1`,
+      [id]
+    );
+    if (goalQ.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Goal not found' });
+    }
+    const goal = goalQ.rows[0];
+    const amountSaved = parseFloat(goal.amount_saved || 0);
+    
+    // Create the GoalRelease transaction if there's anything to release.
+    // A goal with $0 saved (never funded) still gets marked complete, just no release.
+    if (amountSaved > 0) {
+      await client.query(
+        `INSERT INTO transactions
+          (transaction_date, type, amount, category, description, payee, account)
+         VALUES (CURRENT_DATE, 'GoalRelease', $1, $2, $3, 'Goal completion', NULL)`,
+        [amountSaved, goal.match_category, `Released $${amountSaved.toFixed(2)} from goal: ${goal.name}`]
+      );
+    }
+    
+    // Mark goal complete
+    await client.query(
+      `UPDATE savings_goals
+       SET completed_at = NOW(), is_active = false, updated_at = NOW()
+       WHERE id = $1`,
+      [id]
+    );
+    
+    // Deactivate any matching recurring template (type='Savings', same category)
+    await client.query(
+      `UPDATE recurring_transactions
+       SET is_active = false
+       WHERE type = 'Savings' AND category = $1 AND is_active = true`,
+      [goal.match_category]
+    );
+    
+    await client.query('COMMIT');
+    res.json({
+      goal_id: id,
+      released_amount: amountSaved,
+      released: amountSaved > 0,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to complete goal' });
+  } finally {
+    client.release();
+  }
+});
+
 // Add new transaction
 function validateTransactionInput(body) {
-  const validTypes = ['Spending', 'Income', 'Transfer', 'Bills'];
+  // GoalRelease is internal-only — created server-side by goal completion,
+  // not accepted from clients.
+  const validTypes = ['Spending', 'Income', 'Transfer', 'Bills', 'Savings'];
   const errors = [];
   if (!body.transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.transaction_date)) {
     errors.push('transaction_date must be in YYYY-MM-DD format');

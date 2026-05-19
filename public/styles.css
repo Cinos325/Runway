@@ -523,12 +523,12 @@ textarea {
 
 .type-buttons {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
 }
 
 .type-btn {
-    padding: 12px;
+    padding: 12px 8px;
     background: var(--bg-button-secondary);
     color: var(--text-primary);
     border: none;
@@ -1908,4 +1908,28 @@ input[type="date"] {
     background: var(--accent);
     border-radius: 3px;
     transition: width 0.4s ease;
+}
+
+/* Small inline badge used to mark unusual transaction types (currently GoalRelease).
+   Sits next to the description text in transaction list items. */
+.txn-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.txn-badge-release {
+    background: var(--accent-bg-soft);
+    color: var(--accent);
+}
+
+/* Neutral variant for Transfer (no green or red) */
+.recent-amount.neutral {
+    color: var(--text-secondary);
 }
