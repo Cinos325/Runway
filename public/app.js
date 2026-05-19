@@ -770,7 +770,6 @@ document.getElementById('transactionForm').addEventListener('submit', async func
     
     const submitBtn = this.querySelector('.submit-btn');
     const isEditing = editingTransactionId !== null;
-    const originalLabel = submitBtn.textContent;  // captured to restore on error
     submitBtn.textContent = 'Saving...';
     submitBtn.disabled = true;
     
@@ -1728,7 +1727,7 @@ const refreshRecurringOnClose = new MutationObserver(() => {
 refreshRecurringOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
 
 // All transactions list — full history on More tab, with optional filters
-let historyFilters = { type: '', category: '' };
+const historyFilters = { type: '', category: '' };
 
 async function loadMoreTransactionsList() {
     const target = document.getElementById('moreTransactionsList');
@@ -1839,7 +1838,7 @@ async function loadMoreBaseline() {
         const data = await resp.json();
         const baseline = parseFloat(data.baseline || 0).toFixed(2);
         target.textContent = `$${baseline}`;
-    } catch (err) {
+    } catch {
         target.textContent = '—';
     }
 }
@@ -1955,7 +1954,6 @@ updateThemeSegments();
 // where the largest category fills 100%. Hidden when there's no data yet.
 async function loadTopCategories() {
     const target = document.getElementById('topCategoriesList');
-    const card = document.getElementById('topCategoriesCard');
     if (!target) return;
     try {
         const resp = await fetch(`${API_URL}/spending-by-category?limit=5`);

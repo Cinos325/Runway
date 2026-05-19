@@ -52,7 +52,19 @@ export default [
                 URLSearchParams: 'readonly',
                 Promise: 'readonly',
                 Date: 'readonly',
+                // DOM/observer APIs
+                MutationObserver: 'readonly',
+                IntersectionObserver: 'readonly',
+                ResizeObserver: 'readonly',
+                // Storage and media
                 localStorage: 'readonly',
+                sessionStorage: 'readonly',
+                matchMedia: 'readonly',
+                // Common
+                Event: 'readonly',
+                CustomEvent: 'readonly',
+                Element: 'readonly',
+                HTMLElement: 'readonly',
             },
         },
         rules: {
