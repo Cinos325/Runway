@@ -819,8 +819,9 @@ document.getElementById('transactionForm').addEventListener('submit', async func
             
             const successMsg = document.getElementById('successMsg');
             successMsg.textContent = endDate ? 'Installment plan saved!' : 'Recurring transaction saved!';
-            successMsg.style.display = 'block';
-            setTimeout(() => { successMsg.style.display = 'none'; }, 3000);
+            successMsg.hidden = false;
+            successMsg.classList.add('show');
+            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
             
             await loadSpendingPower();
             await loadRecentTransactions();
@@ -862,8 +863,9 @@ document.getElementById('transactionForm').addEventListener('submit', async func
             
             const successMsg = document.getElementById('successMsg');
             successMsg.textContent = isEditing ? 'Transaction updated!' : 'Transaction added!';
-            successMsg.style.display = 'block';
-            setTimeout(() => { successMsg.style.display = 'none'; }, 3000);
+            successMsg.hidden = false;
+            successMsg.classList.add('show');
+            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
             
             await loadSpendingPower();
             await loadRecentTransactions();
@@ -1585,6 +1587,277 @@ if (spToggle && phBreakdown) {
         }
     });
 }
+
+// ============================================
+// Stage 5: More tab content
+// ============================================
+//
+// The More tab has three cards:
+//   1. Recurring transactions — list with add/edit/toggle/delete
+//   2. All transactions — full history, same swipe interactions as Home
+//   3. Settings — baseline, theme, tools
+//
+// Most of the heavy lifting is reused: the existing recurring modal handles
+// add/edit, the existing transaction edit/delete flow handles inline actions.
+
+async function loadMoreRecurringList() {
+    const target = document.getElementById('moreRecurringList');
+    if (!target) return;
+    try {
+        const response = await fetch(`${API_URL}/recurring`);
+        const items = await response.json();
+        
+        if (!Array.isArray(items) || items.length === 0) {
+            target.innerHTML = '<div class="empty-state">No recurring transactions yet.</div>';
+            return;
+        }
+        
+        // Group by type for readability (same grouping as the modal version)
+        const groups = {};
+        items.forEach(item => {
+            if (!groups[item.type]) groups[item.type] = [];
+            groups[item.type].push(item);
+        });
+        
+        const typeOrder = ['Income', 'Bills', 'Savings', 'Spending'];
+        let html = '';
+        typeOrder.forEach(type => {
+            if (!groups[type]) return;
+            html += `<div class="section-header"><div class="section-title">${type}</div></div>`;
+            groups[type].forEach(item => {
+                const amount = parseFloat(item.amount).toFixed(2);
+                const meta = [
+                    item.frequency,
+                    item.payee,
+                    item.category,
+                    item.end_date ? `until ${item.end_date.slice(0, 10)}` : null,
+                ].filter(Boolean).join(' · ');
+                const inactiveClass = item.is_active ? '' : ' inactive';
+                html += `
+                    <div class="more-recurring-item${inactiveClass}" data-rec-id="${item.id}">
+                        <div class="more-recurring-info">
+                            <div class="more-recurring-name">${escapeHtml(item.name)}</div>
+                            <div class="more-recurring-meta">${escapeHtml(meta)}${item.is_active ? '' : ' · inactive'}</div>
+                            <div class="more-recurring-row-actions">
+                                <button type="button" data-action="edit" data-rec-id="${item.id}">Edit</button>
+                                <button type="button" data-action="toggle-active" data-rec-id="${item.id}">${item.is_active ? 'Pause' : 'Resume'}</button>
+                                <button type="button" class="danger" data-action="delete" data-rec-id="${item.id}">Delete</button>
+                            </div>
+                        </div>
+                        <div class="more-recurring-amount">$${amount}</div>
+                    </div>
+                `;
+            });
+        });
+        target.innerHTML = html;
+    } catch (err) {
+        console.error('Failed to load recurring list:', err);
+        target.innerHTML = '<div class="empty-state">Could not load.</div>';
+    }
+}
+
+// Delegated handler for edit/toggle/delete actions in the recurring list
+document.getElementById('moreRecurringList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.recId, 10);
+    if (isNaN(id)) return;
+    
+    if (btn.dataset.action === 'edit') {
+        try {
+            const resp = await fetch(`${API_URL}/recurring`);
+            const items = await resp.json();
+            const item = items.find(x => x.id === id);
+            if (item) {
+                openRecurringFormForEdit(item);
+                recurringModal.classList.add('active');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    } else if (btn.dataset.action === 'toggle-active') {
+        try {
+            const resp = await fetch(`${API_URL}/recurring`);
+            const items = await resp.json();
+            const item = items.find(x => x.id === id);
+            if (!item) return;
+            const updateResp = await fetch(`${API_URL}/recurring/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...item, is_active: !item.is_active }),
+            });
+            if (!updateResp.ok) throw new Error('Update failed');
+            await loadMoreRecurringList();
+            await loadSpendingPower();
+            await loadGoals();
+        } catch (err) {
+            alert('Could not change status.');
+            console.error(err);
+        }
+    } else if (btn.dataset.action === 'delete') {
+        if (!confirm('Delete this recurring entry? Past generated transactions are NOT deleted.')) return;
+        try {
+            const resp = await fetch(`${API_URL}/recurring/${id}`, { method: 'DELETE' });
+            if (!resp.ok) throw new Error('Delete failed');
+            await loadMoreRecurringList();
+            await loadSpendingPower();
+            await loadGoals();
+        } catch (err) {
+            alert('Could not delete.');
+            console.error(err);
+        }
+    }
+});
+
+// "+ Add" opens the existing recurring modal in add mode
+document.getElementById('moreAddRecurringBtn').addEventListener('click', () => {
+    openRecurringFormForAdd();
+    recurringModal.classList.add('active');
+});
+
+// Refresh the More recurring list whenever the modal closes (in case something was edited)
+const refreshRecurringOnClose = new MutationObserver(() => {
+    if (!recurringModal.classList.contains('active')) {
+        loadMoreRecurringList();
+    }
+});
+refreshRecurringOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
+
+// All transactions list — full history on More tab
+async function loadMoreTransactionsList() {
+    const target = document.getElementById('moreTransactionsList');
+    if (!target) return;
+    try {
+        const response = await fetch(`${API_URL}/transactions/recent`);
+        const transactions = await response.json();
+        if (!Array.isArray(transactions) || transactions.length === 0) {
+            target.innerHTML = '<div class="empty-state">No transactions yet.</div>';
+            return;
+        }
+        target.innerHTML = transactions.map(t => `
+            <div class="recent-item" data-id="${t.id}">
+                <div class="recent-item-edit-bg" data-action="edit" data-id="${t.id}">Edit</div>
+                <div class="recent-item-delete-bg" data-action="confirm-delete" data-id="${t.id}">Delete</div>
+                <div class="recent-item-content">
+                    <div>
+                        <div class="recent-desc">${escapeHtml(t.description || t.payee || t.category)}</div>
+                        <div class="recent-cat">${escapeHtml(t.category)} • ${t.transaction_date.slice(0, 10)}</div>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <div class="recent-amount ${t.type === 'Income' ? 'income' : 'spending'}">
+                            ${t.type === 'Income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                        </div>
+                        <button type="button" class="recent-item-edit-btn" data-action="edit" data-id="${t.id}" aria-label="Edit" title="Edit">✎</button>
+                        <button type="button" class="recent-item-delete-btn" data-action="confirm-delete" data-id="${t.id}" aria-label="Delete" title="Delete">×</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        attachSwipeHandlers();
+    } catch (err) {
+        console.error('Failed to load all transactions:', err);
+        target.innerHTML = '<div class="empty-state">Could not load.</div>';
+    }
+}
+
+// Edit/delete actions on the More-tab transactions list
+document.getElementById('moreTransactionsList').addEventListener('click', async (e) => {
+    const trigger = e.target.closest('[data-action]');
+    if (!trigger) return;
+    const id = parseInt(trigger.dataset.id, 10);
+    if (isNaN(id)) return;
+    
+    if (trigger.dataset.action === 'confirm-delete') {
+        openDeleteConfirm(id);
+    } else if (trigger.dataset.action === 'edit') {
+        try {
+            const resp = await fetch(`${API_URL}/transactions/recent`);
+            const items = await resp.json();
+            const t = items.find(x => x.id === id);
+            if (t) enterEditMode(t);
+        } catch (err) {
+            console.error('Failed to load transaction for edit:', err);
+        }
+    }
+});
+
+// Baseline display + edit
+async function loadMoreBaseline() {
+    const target = document.getElementById('moreBaselineDisplay');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/spending-power`);
+        const data = await resp.json();
+        const baseline = parseFloat(data.baseline || 0).toFixed(2);
+        target.textContent = `$${baseline}`;
+    } catch (err) {
+        target.textContent = '—';
+    }
+}
+
+document.getElementById('moreEditBaselineBtn').addEventListener('click', () => {
+    document.getElementById('editBaselineBtn').click();  // reuse the existing modal trigger
+});
+
+// Theme segmented control (Light / Dark / Auto)
+function updateThemeSegments() {
+    const saved = localStorage.getItem('theme');
+    const active = saved === 'dark' ? 'dark' : saved === 'light' ? 'light' : 'auto';
+    document.querySelectorAll('.theme-segment').forEach(seg => {
+        seg.classList.toggle('active', seg.dataset.theme === active);
+    });
+}
+
+document.querySelectorAll('.theme-segment').forEach(seg => {
+    seg.addEventListener('click', () => {
+        const choice = seg.dataset.theme;
+        if (choice === 'auto') {
+            localStorage.removeItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } else {
+            localStorage.setItem('theme', choice);
+            document.documentElement.setAttribute('data-theme', choice);
+        }
+        updateThemeSegments();
+    });
+});
+
+// Render tools links into the More tab settings card
+async function loadMoreTools() {
+    const target = document.getElementById('moreToolsLinks');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/tools`);
+        const tools = await resp.json();
+        if (!Array.isArray(tools) || tools.length === 0) {
+            target.innerHTML = '';
+            return;
+        }
+        target.innerHTML = tools.map(t =>
+            `<a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.name)}</a>`
+        ).join('');
+    } catch (err) {
+        console.error('Failed to load tools:', err);
+        target.innerHTML = '';
+    }
+}
+
+// Refresh More tab content when switching to it
+const moreRefreshOnSwitch = new MutationObserver(() => {
+    const moreTab = document.getElementById('moreTab');
+    if (moreTab && moreTab.classList.contains('active')) {
+        loadMoreRecurringList();
+        loadMoreTransactionsList();
+        loadMoreBaseline();
+        loadMoreTools();
+    }
+});
+moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
+    attributes: true, attributeFilter: ['class']
+});
+
+updateThemeSegments();
 
 loadSpendingPower();
 loadRecentTransactions();

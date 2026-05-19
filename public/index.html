@@ -37,6 +37,10 @@
     </script>
 </head>
 <body>
+    <!-- Success toast: shown briefly after transactions/recurring/etc save.
+         Positioned to overlay the persistent header so it's visible from any tab. -->
+    <div class="success-toast" id="successMsg" role="status" aria-live="polite" hidden>Transaction added!</div>
+    
     <!-- Persistent header — sits above all tabs, always visible. -->
     <header class="persistent-header" id="persistentHeader">
         <!-- Top row: "Runway" branding on the left, current month on the right. -->
@@ -103,8 +107,6 @@
              Recent transactions (3-5) for quick context, then goals for periodic awareness.
              The form moved to Add; tools footer moved to a hidden holder (stage 5 places it on More). -->
         <div class="tab-pane active" id="homeTab" data-tab="home">
-            <div class="success-message" id="successMsg">Transaction added!</div>
-            
             <div class="recent-transactions">
                 <div class="card-header-row">
                     <h2 class="card-heading">Recent</h2>
@@ -239,11 +241,55 @@
         
         <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
-            <div class="tab-placeholder">
-                <h2>More</h2>
-                <p>Recurring transactions, full transaction history, and settings will live here.</p>
+            <!-- Recurring transactions card -->
+            <div class="more-card">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Recurring transactions</h2>
+                    <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
+                </div>
+                <div id="moreRecurringList">
+                    <!-- Populated by loadMoreRecurringList() -->
+                    <div class="empty-state">Loading…</div>
+                </div>
             </div>
-            <!-- Tools footer moves here in stage 5; for now it lives at the bottom of the body, hidden. -->
+            
+            <!-- Full transaction history -->
+            <div class="more-card">
+                <h2 class="card-heading" style="margin-bottom: 16px;">All transactions</h2>
+                <div id="moreTransactionsList">
+                    <div class="empty-state">Loading…</div>
+                </div>
+            </div>
+            
+            <!-- Settings -->
+            <div class="more-card">
+                <h2 class="card-heading" style="margin-bottom: 16px;">Settings</h2>
+                <div class="settings-list">
+                    <button type="button" class="settings-row" id="moreEditBaselineBtn">
+                        <div class="settings-row-label">Baseline</div>
+                        <div class="settings-row-value">
+                            <span id="moreBaselineDisplay">—</span>
+                            <span class="settings-row-chevron">›</span>
+                        </div>
+                    </button>
+                    
+                    <div class="settings-row settings-row-static">
+                        <div class="settings-row-label">Theme</div>
+                        <div class="settings-row-value">
+                            <button type="button" class="theme-segment" id="moreThemeLight" data-theme="light">Light</button>
+                            <button type="button" class="theme-segment" id="moreThemeDark" data-theme="dark">Dark</button>
+                            <button type="button" class="theme-segment" id="moreThemeAuto" data-theme="auto">Auto</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-row settings-row-static" id="moreToolsRow">
+                        <div class="settings-row-label">Tools</div>
+                        <div class="settings-row-value settings-tools-links" id="moreToolsLinks">
+                            <!-- Populated by loadTools() -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     

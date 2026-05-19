@@ -1529,3 +1529,219 @@ body {
 .field-hint:empty {
     display: none;
 }
+
+/* ============================================
+   Stage 5: More tab content (recurring list, all transactions, settings)
+   Plus: success toast moved to top-level (was inside Home tab)
+   ============================================ */
+
+/* Success toast: shows briefly after a save, regardless of active tab.
+   Fixed position below the persistent header, animates in/out. */
+.success-toast {
+    position: fixed;
+    top: max(76px, calc(env(safe-area-inset-top, 0) + 76px));
+    left: 50%;
+    transform: translate(-50%, -10px);
+    z-index: 1500;  /* above the persistent header */
+    background: var(--success);
+    color: var(--text-inverse);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.success-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+/* Generic card wrapper used on the More tab */
+.more-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
+}
+
+.more-card:last-child {
+    margin-bottom: 0;
+}
+
+/* Recurring list items on the More tab */
+.more-recurring-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-divider-soft);
+    align-items: center;
+}
+
+.more-recurring-item:last-child {
+    border-bottom: none;
+}
+
+.more-recurring-item.inactive {
+    opacity: 0.5;
+}
+
+.more-recurring-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.more-recurring-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.more-recurring-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.more-recurring-amount {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.more-recurring-row-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.more-recurring-row-actions button {
+    background: transparent;
+    border: 1px solid var(--border-input);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    color: var(--text-primary);
+}
+
+.more-recurring-row-actions button.danger {
+    color: var(--danger);
+    border-color: var(--danger-border-soft);
+}
+
+/* Settings rows */
+.settings-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-divider-soft);
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background: transparent;
+    font-family: inherit;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.settings-row:last-child {
+    border-bottom: none;
+}
+
+.settings-row.settings-row-static {
+    cursor: default;
+}
+
+.settings-row-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.settings-row-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.settings-row-chevron {
+    color: var(--text-tertiary);
+    font-size: 20px;
+    line-height: 1;
+}
+
+/* Theme segmented control */
+.theme-segment {
+    background: transparent;
+    border: 1px solid var(--border-input);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+}
+
+.theme-segment:first-of-type { border-radius: 6px 0 0 6px; }
+.theme-segment:last-of-type { border-radius: 0 6px 6px 0; }
+.theme-segment:not(:first-of-type) { margin-left: -1px; }
+
+.theme-segment.active {
+    background: var(--accent);
+    color: var(--text-inverse);
+    border-color: var(--accent);
+    z-index: 1;
+    position: relative;
+}
+
+/* Tools links in settings */
+.settings-tools-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.settings-tools-links a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.settings-tools-links a:hover {
+    text-decoration: underline;
+}
+
+.settings-tools-links:empty::after {
+    content: "—";
+    color: var(--text-tertiary);
+}
+
+/* All transactions list on More uses the same .recent-item styling */
+#moreTransactionsList .recent-item {
+    /* matches existing styles */
+}
