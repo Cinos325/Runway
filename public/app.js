@@ -266,17 +266,17 @@ async function loadAccounts() {
 // ============================================
 
 async function loadGoals() {
-    // Fetch both in parallel
-    const [installments, savingsGoals] = await Promise.all([
+    // Fetch all three sources in parallel
+    const [installments, savingsPlans, savingsGoals] = await Promise.all([
         fetchJSON(`${API_URL}/installments`).catch(err => { console.error(err); return []; }),
+        fetchJSON(`${API_URL}/savings-plans`).catch(err => { console.error(err); return []; }),
         fetchJSON(`${API_URL}/goals`).catch(err => { console.error(err); return []; }),
     ]);
     
     renderInstallments(installments);
+    renderSavingsPlans(savingsPlans);
     renderSavingsGoals(savingsGoals);
     
-    // The card is always visible — even with no installments or savings goals —
-    // so the "+ New goal" button is always discoverable.
     document.getElementById('goalsCard').classList.remove('empty');
 }
 
@@ -331,8 +331,46 @@ function renderInstallment(it) {
                 <div class="installment-pace-marker" style="left: ${markerLeft}%" title="Expected position at this point"></div>
             </div>
             <div class="installment-meta">
-                <span>${it.payments_made} of ${it.total_periods} payments • ends ${it.end_date}</span>
+                <span>${it.payments_made} of ${it.total_periods} payments • ends ${it.end_date.slice(0, 10)}</span>
                 <span class="installment-status ${statusClass}">${statusText}</span>
+            </div>
+        </div>
+    `;
+}
+
+// Auto-detected savings plans (recurring Savings with end_date). Parallel to
+// installments but presents progress in savings-positive language ("saved" vs "paid")
+// and is tappable to mark complete.
+function renderSavingsPlans(items) {
+    const section = document.getElementById('savingsPlansSection');
+    const list = document.getElementById('savingsPlansList');
+    section.classList.remove('empty');
+    if (!Array.isArray(items) || items.length === 0) {
+        list.innerHTML = '<div class="goal-empty-state">No saving plans yet. Add a Savings-type recurring transaction with a number of payments to track one here.</div>';
+        return;
+    }
+    list.innerHTML = items.map(renderSavingsPlan).join('');
+}
+
+function renderSavingsPlan(p) {
+    const pctSaved = parseFloat(p.pct_saved) || 0;
+    const saved = parseFloat(p.amount_saved).toFixed(2);
+    const target = parseFloat(p.target_amount).toFixed(2);
+    const fillWidth = Math.min(100, pctSaved * 100).toFixed(1);
+    const isComplete = pctSaved >= 1;
+    const pctClass = isComplete ? 'complete' : '';
+    return `
+        <div class="goal-item" data-plan-id="${p.id}" data-source="plan">
+            <div class="goal-item-header">
+                <div class="goal-name">${escapeHtml(p.name)}</div>
+                <div class="goal-amount">$${saved} / $${target}</div>
+            </div>
+            <div class="goal-progress-bar">
+                <div class="goal-progress-fill ${pctClass}" style="width: ${fillWidth}%"></div>
+            </div>
+            <div class="goal-meta">
+                <span>${p.payments_made} of ${p.total_periods} contributions • ends ${p.end_date.slice(0, 10)}</span>
+                <span class="goal-pct ${pctClass}">${Math.round(pctSaved * 100)}%</span>
             </div>
         </div>
     `;
@@ -434,6 +472,43 @@ document.getElementById('savingsGoalsList').addEventListener('click', async (e) 
         const goal = goals.find(g => g.id === id);
         if (goal) openGoalModalForEdit(goal);
     } catch (err) {
+        console.error(err);
+    }
+});
+
+// Click on an auto-detected savings plan → confirm + complete it.
+// Auto-detected plans have no separate edit affordance (you edit by changing
+// the underlying recurring transaction in More → Recurring). The only inline
+// action is "I've spent the money — release it."
+document.getElementById('savingsPlansList').addEventListener('click', async (e) => {
+    const item = e.target.closest('.goal-item');
+    if (!item) return;
+    const id = parseInt(item.dataset.planId, 10);
+    if (isNaN(id)) return;
+    if (!confirm('Mark this saving plan complete? This will release the saved amount back into spending power and stop the recurring contribution. Use this when you\'ve actually made the purchase.')) return;
+    try {
+        const resp = await fetch(`${API_URL}/savings-plans/${id}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Could not complete plan');
+        }
+        const result = await resp.json();
+        await loadGoals();
+        await loadSpendingPower();
+        await loadRecentTransactions();
+        await loadTopCategories();
+        if (result.released) {
+            const successMsg = document.getElementById('successMsg');
+            successMsg.textContent = `Plan complete — $${parseFloat(result.released_amount).toFixed(2)} released`;
+            successMsg.hidden = false;
+            successMsg.classList.add('show');
+            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
+        }
+    } catch (err) {
+        alert('Could not complete plan: ' + err.message);
         console.error(err);
     }
 });

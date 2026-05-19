@@ -127,11 +127,12 @@
                 </div>
             </div>
             
-            <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
+            <!-- Goals card: installments (auto), saving plans (auto from recurring Savings),
+                 and open goals (manually created for open-ended saving). -->
             <div class="goals-card" id="goalsCard">
                 <div class="goals-card-header">
                     <h2 class="goals-heading">Goals</h2>
-                    <button type="button" class="add-button" id="addGoalBtn">+ New goal</button>
+                    <button type="button" class="add-button" id="addGoalBtn">+ New open goal</button>
                 </div>
                 
                 <div class="goals-section" id="installmentsSection">
@@ -139,8 +140,13 @@
                     <div id="installmentsList"></div>
                 </div>
                 
+                <div class="goals-section" id="savingsPlansSection">
+                    <div class="goals-section-title">Saving plans</div>
+                    <div id="savingsPlansList"></div>
+                </div>
+                
                 <div class="goals-section" id="savingsGoalsSection">
-                    <div class="goals-section-title">Savings goals</div>
+                    <div class="goals-section-title">Open goals</div>
                     <div id="savingsGoalsList"></div>
                 </div>
             </div>
