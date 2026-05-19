@@ -1745,3 +1745,167 @@ body {
 #moreTransactionsList .recent-item {
     /* matches existing styles */
 }
+
+/* iOS Safari renders <input type="date"> at the native picker's preferred width,
+   which overflows narrow form cards on mobile. Force it to honor the container.
+   `min-width: 0` is the key bit — without it, intrinsic content size wins. */
+input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+/* ============================================
+   Stage 6: More tab sub-tabs
+   ============================================ */
+
+/* Three-button selector at the top of the More tab.
+   Visually lighter than the bottom-nav so it doesn't compete with it.
+   Sticky-ish — sits at the top of the More tab content. */
+.sub-tabs {
+    display: flex;
+    background: var(--bg-card);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
+    gap: 2px;
+}
+
+.sub-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 10px 8px;
+    border-radius: 7px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.sub-tab.active {
+    background: var(--accent);
+    color: var(--text-inverse);
+    font-weight: 600;
+}
+
+.sub-tab-pane[hidden] {
+    display: none;
+}
+
+/* ============================================
+   Stage 6: History filters
+   ============================================ */
+
+.history-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-divider-soft);
+}
+
+.history-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.filter-chip {
+    background: var(--bg-button-secondary);
+    border: 1px solid var(--border-input);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.filter-chip.active {
+    background: var(--accent);
+    color: var(--text-inverse);
+    border-color: var(--accent);
+}
+
+.history-filter-category select {
+    width: 100%;
+}
+
+/* ============================================
+   Stage 6: Top categories card on Home
+   ============================================ */
+
+.top-categories-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 16px;
+    box-shadow: var(--shadow-card);
+}
+
+.top-categories-empty {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 8px 0;
+    font-style: italic;
+}
+
+.top-cat-item {
+    padding: 8px 0;
+}
+
+.top-cat-item:not(:last-child) {
+    margin-bottom: 4px;
+}
+
+.top-cat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.top-cat-name {
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+    margin-right: 8px;
+}
+
+.top-cat-amount {
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.top-cat-bar {
+    height: 5px;
+    background: var(--bg-track);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.top-cat-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}

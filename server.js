@@ -66,9 +66,31 @@ app.get('/api/transactions/recent', async (req, res) => {
 });
 */
 
-// Get recent transactions (by created_at date)
+// Get recent transactions (by created_at date) with optional filtering.
+// Query params: type (Spending|Income|Bills|Transfer), category, limit (default 10, max 200)
 app.get('/api/transactions/recent', async (req, res) => {
   try {
+    const { type, category } = req.query;
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 10;
+    if (limit > 200) limit = 200;
+    
+    // Build WHERE clause from optional filters. Parameterized to avoid SQL injection.
+    const where = [];
+    const params = [];
+    if (type) {
+      params.push(type);
+      where.push(`type = $${params.length}`);
+    }
+    if (category) {
+      params.push(category);
+      where.push(`category = $${params.length}`);
+    }
+    const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    
+    params.push(limit);
+    const limitPlaceholder = `$${params.length}`;
+    
     const result = await pool.query(`
       SELECT
         id,
@@ -79,9 +101,10 @@ app.get('/api/transactions/recent', async (req, res) => {
         description,
         payee
       FROM transactions
+      ${whereSQL}
       ORDER BY created_at DESC NULLS LAST
-      LIMIT 10
-    `);
+      LIMIT ${limitPlaceholder}
+    `, params);
 
     res.json(result.rows);
   } catch (err) {
@@ -361,6 +384,34 @@ app.get('/api/categories', async (req, res) => {
     `);
     const categories = result.rows.map(row => row.category);
     res.json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Top N spending categories for the current month.
+// Returns: [{ category, total }, ...] sorted by total descending.
+// Filters to type='Spending' (discretionary) by design — Bills are excluded
+// because they're fixed obligations and would dominate the chart every month.
+app.get('/api/spending-by-category', async (req, res) => {
+  try {
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 5;
+    if (limit > 20) limit = 20;
+    
+    const result = await pool.query(`
+      SELECT category, SUM(amount)::numeric AS total
+      FROM transactions
+      WHERE type = 'Spending'
+        AND month = date_trunc('month', CURRENT_DATE)::date
+        AND category IS NOT NULL
+        AND category != ''
+      GROUP BY category
+      ORDER BY total DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database error' });

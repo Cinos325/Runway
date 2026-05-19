@@ -825,6 +825,7 @@ document.getElementById('transactionForm').addEventListener('submit', async func
             
             await loadSpendingPower();
             await loadRecentTransactions();
+            await loadTopCategories();
             await loadGoals();
             
             // Reset form for next entry — stay on Add tab, ready to go
@@ -869,6 +870,7 @@ document.getElementById('transactionForm').addEventListener('submit', async func
             
             await loadSpendingPower();
             await loadRecentTransactions();
+            await loadTopCategories();
             await loadGoals();
             
             if (isEditing) {
@@ -1040,6 +1042,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
         closeDeleteConfirm();
         await loadSpendingPower();
         await loadRecentTransactions();
+        await loadTopCategories();
         await loadGoals();
     } catch (err) {
         alert('Failed to delete. Please try again.');
@@ -1444,6 +1447,7 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
         await loadRecurringList();
         await loadSpendingPower();
         await loadRecentTransactions();
+        await loadTopCategories();
         await loadGoals();
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -1723,15 +1727,25 @@ const refreshRecurringOnClose = new MutationObserver(() => {
 });
 refreshRecurringOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
 
-// All transactions list — full history on More tab
+// All transactions list — full history on More tab, with optional filters
+let historyFilters = { type: '', category: '' };
+
 async function loadMoreTransactionsList() {
     const target = document.getElementById('moreTransactionsList');
     if (!target) return;
     try {
-        const response = await fetch(`${API_URL}/transactions/recent`);
+        // Build query string from active filters. Limit raised to 50 here since this
+        // is the "full history" view and the user filters it themselves.
+        const params = new URLSearchParams({ limit: '50' });
+        if (historyFilters.type) params.set('type', historyFilters.type);
+        if (historyFilters.category) params.set('category', historyFilters.category);
+        const response = await fetch(`${API_URL}/transactions/recent?${params}`);
         const transactions = await response.json();
         if (!Array.isArray(transactions) || transactions.length === 0) {
-            target.innerHTML = '<div class="empty-state">No transactions yet.</div>';
+            const filterDesc = historyFilters.type || historyFilters.category
+                ? 'No transactions match the current filters.'
+                : 'No transactions yet.';
+            target.innerHTML = `<div class="empty-state">${filterDesc}</div>`;
             return;
         }
         target.innerHTML = transactions.map(t => `
@@ -1759,6 +1773,41 @@ async function loadMoreTransactionsList() {
         target.innerHTML = '<div class="empty-state">Could not load.</div>';
     }
 }
+
+// Populate the category filter dropdown from /api/categories.
+// Idempotent — replaces all options on each call.
+async function populateCategoryFilter() {
+    const sel = document.getElementById('historyCategoryFilter');
+    if (!sel) return;
+    // Don't refetch if we've already populated; categories don't change frequently
+    if (sel.dataset.populated === 'true') return;
+    try {
+        const resp = await fetch(`${API_URL}/categories`);
+        const cats = await resp.json();
+        // Preserve the "All categories" option
+        sel.innerHTML = '<option value="">All categories</option>'
+            + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        sel.dataset.populated = 'true';
+    } catch (err) {
+        console.error('Failed to load categories for filter:', err);
+    }
+}
+
+// Filter chip clicks (type filter)
+document.querySelectorAll('#historyTypeChips .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        document.querySelectorAll('#historyTypeChips .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        historyFilters.type = chip.dataset.filterType || '';
+        loadMoreTransactionsList();
+    });
+});
+
+// Category filter dropdown
+document.getElementById('historyCategoryFilter').addEventListener('change', (e) => {
+    historyFilters.category = e.target.value || '';
+    loadMoreTransactionsList();
+});
 
 // Edit/delete actions on the More-tab transactions list
 document.getElementById('moreTransactionsList').addEventListener('click', async (e) => {
@@ -1843,14 +1892,56 @@ async function loadMoreTools() {
     }
 }
 
-// Refresh More tab content when switching to it
+// ============================================
+// Stage 6: More tab sub-tabs
+// ============================================
+//
+// Inside the More tab there are three sub-sections (Recurring, History, Settings).
+// Each loads its own data when first switched to.
+
+function switchSubTab(name) {
+    document.querySelectorAll('.sub-tab').forEach(btn => {
+        const isActive = btn.dataset.subtab === name;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('.sub-tab-pane').forEach(pane => {
+        const isActive = pane.dataset.subtab === name;
+        pane.classList.toggle('active', isActive);
+        if (isActive) {
+            pane.removeAttribute('hidden');
+        } else {
+            pane.setAttribute('hidden', '');
+        }
+    });
+    // Load the data for the newly visible sub-tab
+    loadActiveSubTabData(name);
+}
+
+function loadActiveSubTabData(name) {
+    if (name === 'recurring') {
+        loadMoreRecurringList();
+    } else if (name === 'history') {
+        loadMoreTransactionsList();
+        populateCategoryFilter();
+    } else if (name === 'settings') {
+        loadMoreBaseline();
+        loadMoreTools();
+    }
+}
+
+document.querySelectorAll('.sub-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchSubTab(btn.dataset.subtab));
+});
+
+// When the user switches to the More tab from the bottom nav, load whichever
+// sub-tab is currently active (Recurring is the default).
 const moreRefreshOnSwitch = new MutationObserver(() => {
     const moreTab = document.getElementById('moreTab');
     if (moreTab && moreTab.classList.contains('active')) {
-        loadMoreRecurringList();
-        loadMoreTransactionsList();
-        loadMoreBaseline();
-        loadMoreTools();
+        const activeSub = document.querySelector('.sub-tab.active');
+        const name = activeSub ? activeSub.dataset.subtab : 'recurring';
+        loadActiveSubTabData(name);
     }
 });
 moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
@@ -1859,15 +1950,52 @@ moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
 
 updateThemeSegments();
 
+// Render top spending categories on Home.
+// Fetches /api/spending-by-category, displays each with a proportion bar
+// where the largest category fills 100%. Hidden when there's no data yet.
+async function loadTopCategories() {
+    const target = document.getElementById('topCategoriesList');
+    const card = document.getElementById('topCategoriesCard');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/spending-by-category?limit=5`);
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+            target.innerHTML = '<div class="top-categories-empty">No spending recorded this month yet.</div>';
+            return;
+        }
+        // Find the largest total to use as the bar's max-fill reference
+        const maxTotal = rows.reduce((m, r) => Math.max(m, parseFloat(r.total)), 0);
+        target.innerHTML = rows.map(r => {
+            const total = parseFloat(r.total);
+            const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+            return `
+                <div class="top-cat-item">
+                    <div class="top-cat-row">
+                        <div class="top-cat-name">${escapeHtml(r.category)}</div>
+                        <div class="top-cat-amount">$${total.toFixed(2)}</div>
+                    </div>
+                    <div class="top-cat-bar"><div class="top-cat-bar-fill" style="width: ${pct.toFixed(1)}%"></div></div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load top categories:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
 loadSpendingPower();
 loadRecentTransactions();
 loadCategories();
 loadAccounts();
 loadTools();
 loadGoals();
+loadTopCategories();
 
 setInterval(() => {
     loadSpendingPower();
     loadRecentTransactions();
     loadGoals();
+    loadTopCategories();
 }, 30000);

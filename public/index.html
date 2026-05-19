@@ -117,6 +117,16 @@
                 </div>
             </div>
             
+            <!-- Top spending categories this month -->
+            <div class="top-categories-card" id="topCategoriesCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Top categories this month</h2>
+                </div>
+                <div id="topCategoriesList">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
+            
             <!-- Goals card: installments (auto-detected) + savings goals (user-defined) -->
             <div class="goals-card" id="goalsCard">
                 <div class="goals-card-header">
@@ -241,51 +251,79 @@
         
         <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
-            <!-- Recurring transactions card -->
-            <div class="more-card">
-                <div class="card-header-row">
-                    <h2 class="card-heading">Recurring transactions</h2>
-                    <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
-                </div>
-                <div id="moreRecurringList">
-                    <!-- Populated by loadMoreRecurringList() -->
-                    <div class="empty-state">Loading…</div>
+            <!-- Sub-tab selector: three sections inside More -->
+            <div class="sub-tabs" role="tablist" aria-label="More sections">
+                <button type="button" class="sub-tab active" data-subtab="recurring" role="tab" aria-selected="true">Recurring</button>
+                <button type="button" class="sub-tab" data-subtab="history" role="tab" aria-selected="false">History</button>
+                <button type="button" class="sub-tab" data-subtab="settings" role="tab" aria-selected="false">Settings</button>
+            </div>
+            
+            <!-- Recurring sub-tab -->
+            <div class="sub-tab-pane active" id="subRecurring" data-subtab="recurring" role="tabpanel">
+                <div class="more-card">
+                    <div class="card-header-row">
+                        <h2 class="card-heading">Recurring transactions</h2>
+                        <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
+                    </div>
+                    <div id="moreRecurringList">
+                        <div class="empty-state">Loading…</div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Full transaction history -->
-            <div class="more-card">
-                <h2 class="card-heading" style="margin-bottom: 16px;">All transactions</h2>
-                <div id="moreTransactionsList">
-                    <div class="empty-state">Loading…</div>
-                </div>
-            </div>
-            
-            <!-- Settings -->
-            <div class="more-card">
-                <h2 class="card-heading" style="margin-bottom: 16px;">Settings</h2>
-                <div class="settings-list">
-                    <button type="button" class="settings-row" id="moreEditBaselineBtn">
-                        <div class="settings-row-label">Baseline</div>
-                        <div class="settings-row-value">
-                            <span id="moreBaselineDisplay">—</span>
-                            <span class="settings-row-chevron">›</span>
+            <!-- History sub-tab -->
+            <div class="sub-tab-pane" id="subHistory" data-subtab="history" role="tabpanel" hidden>
+                <div class="more-card">
+                    <h2 class="card-heading" style="margin-bottom: 12px;">All transactions</h2>
+                    <!-- Filters: type chips + category dropdown -->
+                    <div class="history-filters">
+                        <div class="history-filter-chips" id="historyTypeChips" role="group" aria-label="Filter by type">
+                            <button type="button" class="filter-chip active" data-filter-type="">All</button>
+                            <button type="button" class="filter-chip" data-filter-type="Spending">Spending</button>
+                            <button type="button" class="filter-chip" data-filter-type="Income">Income</button>
+                            <button type="button" class="filter-chip" data-filter-type="Bills">Bills</button>
+                            <button type="button" class="filter-chip" data-filter-type="Transfer">Transfer</button>
                         </div>
-                    </button>
-                    
-                    <div class="settings-row settings-row-static">
-                        <div class="settings-row-label">Theme</div>
-                        <div class="settings-row-value">
-                            <button type="button" class="theme-segment" id="moreThemeLight" data-theme="light">Light</button>
-                            <button type="button" class="theme-segment" id="moreThemeDark" data-theme="dark">Dark</button>
-                            <button type="button" class="theme-segment" id="moreThemeAuto" data-theme="auto">Auto</button>
+                        <div class="history-filter-category">
+                            <select id="historyCategoryFilter" aria-label="Filter by category">
+                                <option value="">All categories</option>
+                                <!-- Categories populated by JS from /api/categories -->
+                            </select>
                         </div>
                     </div>
-                    
-                    <div class="settings-row settings-row-static" id="moreToolsRow">
-                        <div class="settings-row-label">Tools</div>
-                        <div class="settings-row-value settings-tools-links" id="moreToolsLinks">
-                            <!-- Populated by loadTools() -->
+                    <div id="moreTransactionsList">
+                        <div class="empty-state">Loading…</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings sub-tab -->
+            <div class="sub-tab-pane" id="subSettings" data-subtab="settings" role="tabpanel" hidden>
+                <div class="more-card">
+                    <h2 class="card-heading" style="margin-bottom: 16px;">Settings</h2>
+                    <div class="settings-list">
+                        <button type="button" class="settings-row" id="moreEditBaselineBtn">
+                            <div class="settings-row-label">Baseline</div>
+                            <div class="settings-row-value">
+                                <span id="moreBaselineDisplay">—</span>
+                                <span class="settings-row-chevron">›</span>
+                            </div>
+                        </button>
+                        
+                        <div class="settings-row settings-row-static">
+                            <div class="settings-row-label">Theme</div>
+                            <div class="settings-row-value">
+                                <button type="button" class="theme-segment" id="moreThemeLight" data-theme="light">Light</button>
+                                <button type="button" class="theme-segment" id="moreThemeDark" data-theme="dark">Dark</button>
+                                <button type="button" class="theme-segment" id="moreThemeAuto" data-theme="auto">Auto</button>
+                            </div>
+                        </div>
+                        
+                        <div class="settings-row settings-row-static" id="moreToolsRow">
+                            <div class="settings-row-label">Tools</div>
+                            <div class="settings-row-value settings-tools-links" id="moreToolsLinks">
+                                <!-- Populated by loadMoreTools() -->
+                            </div>
                         </div>
                     </div>
                 </div>
