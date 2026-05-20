@@ -425,7 +425,6 @@ const goalNameInput = document.getElementById('goalName');
 const goalTargetInput = document.getElementById('goalTarget');
 const goalCategoryInput = document.getElementById('goalCategory');
 const goalNotesInput = document.getElementById('goalNotes');
-const goalIsActiveBtn = document.getElementById('goalIsActive');
 let editingGoalId = null;
 
 function openGoalModalForAdd() {
@@ -435,8 +434,6 @@ function openGoalModalForAdd() {
     goalTargetInput.value = '';
     goalCategoryInput.value = '';
     goalNotesInput.value = '';
-    setToggled(goalIsActiveBtn, true);
-    document.getElementById('goalEditOnlyRows').style.display = 'none';
     document.getElementById('goalEditButtons').style.display = 'none';
     goalModal.classList.add('active');
     goalNameInput.focus();
@@ -449,13 +446,9 @@ function openGoalModalForEdit(goal) {
     goalTargetInput.value = parseFloat(goal.target_amount).toFixed(2);
     goalCategoryInput.value = goal.match_category || '';
     goalNotesInput.value = goal.notes || '';
-    setToggled(goalIsActiveBtn, true);  // editing implies still active
-    document.getElementById('goalEditOnlyRows').style.display = '';
     document.getElementById('goalEditButtons').style.display = 'grid';
     goalModal.classList.add('active');
 }
-
-goalIsActiveBtn.addEventListener('click', () => setToggled(goalIsActiveBtn, !isToggled(goalIsActiveBtn)));
 
 document.getElementById('addGoalBtn').addEventListener('click', openGoalModalForAdd);
 document.getElementById('goalCancelBtn').addEventListener('click', () => goalModal.classList.remove('active'));
@@ -520,9 +513,9 @@ document.getElementById('goalSaveBtn').addEventListener('click', async () => {
         match_category: goalCategoryInput.value.trim(),
         notes: goalNotesInput.value.trim() || null,
     };
-    if (editingGoalId !== null) {
-        payload.is_active = isToggled(goalIsActiveBtn);
-    }
+    // is_active is no longer user-controllable; the modal removed the toggle.
+    // The server defaults to active on create. Completion/deletion are the only
+    // ways for a goal to become inactive — both have their own dedicated actions.
     
     const btn = document.getElementById('goalSaveBtn');
     btn.textContent = 'Saving…';
@@ -677,8 +670,62 @@ const repFrequency = document.getElementById('repFrequency');
 const repDayOfMonth = document.getElementById('repDayOfMonth');
 const repNumPayments = document.getElementById('repNumPayments');
 const repEndPreview = document.getElementById('repEndPreview');
+const repTotalGroup = document.getElementById('repTotalGroup');
+const repTotalAmount = document.getElementById('repTotalAmount');
 const addPayTodayToggle = document.getElementById('addPayTodayToggle');
 const payeeInput = document.getElementById('payee');
+const amountInput = document.getElementById('amount');
+
+// Two-way sync between Amount (per-payment) and Total amount (the calculator helper).
+// The Amount field is the source of truth for saving; the Total field is purely a UI
+// convenience. When the user types in either, the other updates. Number of payments
+// must be set, otherwise the Total field is hidden (the math has no operand).
+//
+// A 'syncing' flag prevents infinite recursion (typing in one triggers an input event
+// on the other if we just set its value).
+let syncing = false;
+
+function syncTotalFromAmount() {
+    if (syncing) return;
+    const n = parseInt(repNumPayments.value, 10);
+    const per = parseFloat(amountInput.value);
+    if (isNaN(n) || n < 1 || isNaN(per)) {
+        // Can't compute; leave Total blank
+        syncing = true;
+        repTotalAmount.value = '';
+        syncing = false;
+        return;
+    }
+    syncing = true;
+    repTotalAmount.value = (per * n).toFixed(2);
+    syncing = false;
+}
+
+function syncAmountFromTotal() {
+    if (syncing) return;
+    const n = parseInt(repNumPayments.value, 10);
+    const total = parseFloat(repTotalAmount.value);
+    if (isNaN(n) || n < 1 || isNaN(total)) return;
+    syncing = true;
+    amountInput.value = (total / n).toFixed(2);
+    syncing = false;
+}
+
+// Total field visibility: only relevant when "this repeats" is on AND number of
+// payments is set. Otherwise hidden (it has no meaning).
+function updateTotalFieldVisibility() {
+    const n = parseInt(repNumPayments.value, 10);
+    const shouldShow = isRepeating && !isNaN(n) && n >= 1;
+    if (shouldShow) {
+        repTotalGroup.removeAttribute('hidden');
+        syncTotalFromAmount();  // populate it based on current Amount
+    } else {
+        repTotalGroup.setAttribute('hidden', '');
+    }
+}
+
+repTotalAmount.addEventListener('input', syncAmountFromTotal);
+amountInput.addEventListener('input', syncTotalFromAmount);
 
 function updateRepeatsVisibility() {
     // Hide the toggle row entirely on Transfer (and force isRepeating off if active)
@@ -701,11 +748,29 @@ function updateSubmitButtonLabel() {
     if (!btn) return;
     if (editingTransactionId !== null) {
         btn.textContent = 'Update Transaction';
-    } else if (isRepeating) {
-        const hasEnd = repNumPayments.value.trim() && parseInt(repNumPayments.value, 10) >= 1;
-        btn.textContent = hasEnd ? 'Save Installment Plan' : 'Save Recurring';
-    } else {
+        return;
+    }
+    if (!isRepeating) {
         btn.textContent = 'Add Transaction';
+        return;
+    }
+    // Repeating: label differs by type, and finite ("number of payments" set) is
+    // called a "plan", while indefinite is "recurring".
+    const hasEnd = repNumPayments.value.trim() && parseInt(repNumPayments.value, 10) >= 1;
+    if (hasEnd) {
+        // Finite — a structured plan
+        if (currentType === 'Spending') btn.textContent = 'Save Installment Plan';
+        else if (currentType === 'Savings') btn.textContent = 'Save Saving Plan';
+        else if (currentType === 'Bills') btn.textContent = 'Save Bill Plan';
+        else if (currentType === 'Income') btn.textContent = 'Save Income Plan';
+        else btn.textContent = 'Save Plan';
+    } else {
+        // Indefinite — just a recurring template
+        if (currentType === 'Bills') btn.textContent = 'Save Recurring Bill';
+        else if (currentType === 'Income') btn.textContent = 'Save Recurring Income';
+        else if (currentType === 'Savings') btn.textContent = 'Save Recurring Saving';
+        else if (currentType === 'Spending') btn.textContent = 'Save Recurring Spending';
+        else btn.textContent = 'Save Recurring';
     }
 }
 
@@ -720,6 +785,7 @@ repeatsToggle.addEventListener('click', () => {
     } else {
         repeatsFields.setAttribute('hidden', '');
     }
+    updateTotalFieldVisibility();
     updateSubmitButtonLabel();
 });
 
@@ -782,7 +848,10 @@ function computeEndDateFromNumPaymentsAdd(startDateStr, frequency, n) {
     return d.toISOString().slice(0, 10);
 }
 
-repNumPayments.addEventListener('input', updateRepEndPreview);
+repNumPayments.addEventListener('input', () => {
+    updateRepEndPreview();
+    updateTotalFieldVisibility();
+});
 transactionDateInput.addEventListener('input', updateRepEndPreview);
 
 // Reset the repeats section to its default state (called after successful submit)
@@ -797,6 +866,8 @@ function resetRepeats() {
     repDayOfMonth.value = '';
     repNumPayments.value = '';
     repEndPreview.textContent = '';
+    repTotalAmount.value = '';
+    repTotalGroup.setAttribute('hidden', '');
     addPayTodayToggle.classList.remove('active');
     addPayTodayToggle.setAttribute('aria-pressed', 'false');
 }

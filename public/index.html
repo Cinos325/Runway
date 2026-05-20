@@ -243,6 +243,16 @@
                             <div class="field-hint" id="repEndPreview"></div>
                         </div>
                         
+                        <!-- Total amount helper: appears when number of payments is set.
+                             Two-way syncs with the main Amount field above. The form's
+                             data model stays per-payment; this is purely a UX convenience
+                             for entering "$1200 over 6 months" rather than doing the math. -->
+                        <div class="form-group" id="repTotalGroup" hidden>
+                            <label>Total amount (calculator)</label>
+                            <input type="number" id="repTotalAmount" step="0.01" placeholder="e.g. 1200.00">
+                            <div class="field-hint">Two-way synced with Amount above. Edit either and the other updates.</div>
+                        </div>
+                        
                         <div class="toggle-row" id="addPayTodayRow">
                             <button type="button" class="toggle-button" id="addPayTodayToggle" aria-pressed="false">
                                 <span class="toggle-icon">✓</span>
@@ -390,13 +400,6 @@
             <div class="form-group" style="margin-bottom: 0;">
                 <label>Notes (optional)</label>
                 <textarea id="goalNotes" placeholder="What is this goal for?"></textarea>
-            </div>
-            
-            <div class="toggle-row" id="goalEditOnlyRows" style="display: none;">
-                <button type="button" class="toggle-button active" id="goalIsActive" aria-pressed="true">
-                    <span class="toggle-icon">✓</span>
-                    <span>Active</span>
-                </button>
             </div>
             
             <div class="modal-buttons" id="goalModalButtons">
