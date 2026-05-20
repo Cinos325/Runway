@@ -953,10 +953,3 @@ CREATE OR REPLACE VIEW public.savings_goal_progress AS
 
 CREATE TRIGGER auto_set_payment_defaults BEFORE UPDATE ON public.payment_checklist FOR EACH ROW EXECUTE FUNCTION public.set_payment_defaults();
 
-
---
--- PostgreSQL database dump complete
---
-
-\unrestrict 8F2jVRkM2661lw6LTmHW9eEKLFGwSK4xi7Q40eKALFSfgbrPmdEGiYAtSL96UqY
-
