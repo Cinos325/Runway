@@ -66,9 +66,31 @@ app.get('/api/transactions/recent', async (req, res) => {
 });
 */
 
-// Get recent transactions (by created_at date)
+// Get recent transactions (by created_at date) with optional filtering.
+// Query params: type (Spending|Income|Bills|Transfer), category, limit (default 10, max 200)
 app.get('/api/transactions/recent', async (req, res) => {
   try {
+    const { type, category } = req.query;
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 10;
+    if (limit > 200) limit = 200;
+    
+    // Build WHERE clause from optional filters. Parameterized to avoid SQL injection.
+    const where = [];
+    const params = [];
+    if (type) {
+      params.push(type);
+      where.push(`type = $${params.length}`);
+    }
+    if (category) {
+      params.push(category);
+      where.push(`category = $${params.length}`);
+    }
+    const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    
+    params.push(limit);
+    const limitPlaceholder = `$${params.length}`;
+    
     const result = await pool.query(`
       SELECT
         id,
@@ -79,9 +101,10 @@ app.get('/api/transactions/recent', async (req, res) => {
         description,
         payee
       FROM transactions
+      ${whereSQL}
       ORDER BY created_at DESC NULLS LAST
-      LIMIT 10
-    `);
+      LIMIT ${limitPlaceholder}
+    `, params);
 
     res.json(result.rows);
   } catch (err) {
@@ -102,6 +125,25 @@ app.get('/api/installments', async (req, res) => {
         amount_paid, payments_made, amount_remaining,
         pct_paid, pct_time_elapsed
       FROM installment_progress
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Auto-detected savings plans: recurring Savings transactions with an end_date.
+// These appear in the Goals card alongside open-ended goals from savings_goals table.
+app.get('/api/savings-plans', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id, name, payee, category, account, frequency,
+        start_date, end_date,
+        payment_amount, total_periods, target_amount,
+        amount_saved, payments_made, amount_remaining, pct_saved
+      FROM savings_plan_progress
     `);
     res.json(result.rows);
   } catch (err) {
@@ -211,9 +253,144 @@ app.delete('/api/goals/:id', async (req, res) => {
   }
 });
 
+// Mark a goal complete. Atomically:
+//   1. Reads the goal's current amount_saved (from the savings_goal_progress view)
+//   2. Inserts a GoalRelease transaction for that amount, dated today, matching the goal's category
+//   3. Sets the goal's completed_at and is_active=false
+//   4. Deactivates any matching recurring transaction (same category, type='Savings')
+// If any step fails, the whole thing rolls back.
+//
+// The GoalRelease transaction is positive: it adds to spending power, offsetting
+// the user's actual purchase. See migrations/2026-05-19-goal-release.sql for the
+// view definitions that use this.
+app.post('/api/goals/:id/complete', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Look up the goal and its current saved amount
+    const goalQ = await client.query(
+      `SELECT g.id, g.name, g.match_category, sgp.amount_saved
+       FROM savings_goals g
+       LEFT JOIN savings_goal_progress sgp ON sgp.id = g.id
+       WHERE g.id = $1`,
+      [id]
+    );
+    if (goalQ.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Goal not found' });
+    }
+    const goal = goalQ.rows[0];
+    const amountSaved = parseFloat(goal.amount_saved || 0);
+    
+    // Create the GoalRelease transaction if there's anything to release.
+    // A goal with $0 saved (never funded) still gets marked complete, just no release.
+    if (amountSaved > 0) {
+      await client.query(
+        `INSERT INTO transactions
+          (transaction_date, type, amount, category, description, payee, account)
+         VALUES (CURRENT_DATE, 'GoalRelease', $1, $2, $3, 'Goal completion', NULL)`,
+        [amountSaved, goal.match_category, `Released $${amountSaved.toFixed(2)} from goal: ${goal.name}`]
+      );
+    }
+    
+    // Mark goal complete
+    await client.query(
+      `UPDATE savings_goals
+       SET completed_at = NOW(), is_active = false, updated_at = NOW()
+       WHERE id = $1`,
+      [id]
+    );
+    
+    // Deactivate any matching recurring template (type='Savings', same category)
+    await client.query(
+      `UPDATE recurring_transactions
+       SET is_active = false
+       WHERE type = 'Savings' AND category = $1 AND is_active = true`,
+      [goal.match_category]
+    );
+    
+    await client.query('COMMIT');
+    res.json({
+      goal_id: id,
+      released_amount: amountSaved,
+      released: amountSaved > 0,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to complete goal' });
+  } finally {
+    client.release();
+  }
+});
+
+// Complete an auto-detected savings plan. Mirrors /api/goals/:id/complete but
+// operates on a recurring_transactions row instead of a savings_goals row.
+// The :id here is the recurring_transactions.id, not a savings_goals.id.
+app.post('/api/savings-plans/:id/complete', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Look up the plan from the savings_plan_progress view to get current saved amount + category
+    const planQ = await client.query(
+      `SELECT id, name, category, amount_saved
+       FROM savings_plan_progress
+       WHERE id = $1`,
+      [id]
+    );
+    if (planQ.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Savings plan not found (might already be inactive or missing end_date)' });
+    }
+    const plan = planQ.rows[0];
+    const amountSaved = parseFloat(plan.amount_saved || 0);
+    
+    // Create the GoalRelease transaction for the released amount
+    if (amountSaved > 0) {
+      await client.query(
+        `INSERT INTO transactions
+          (transaction_date, type, amount, category, description, payee, account)
+         VALUES (CURRENT_DATE, 'GoalRelease', $1, $2, $3, 'Goal completion', NULL)`,
+        [amountSaved, plan.category, `Released $${amountSaved.toFixed(2)} from plan: ${plan.name}`]
+      );
+    }
+    
+    // Deactivate the recurring template itself (the plan's source)
+    await client.query(
+      `UPDATE recurring_transactions
+       SET is_active = false
+       WHERE id = $1`,
+      [id]
+    );
+    
+    await client.query('COMMIT');
+    res.json({
+      plan_id: id,
+      released_amount: amountSaved,
+      released: amountSaved > 0,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to complete savings plan' });
+  } finally {
+    client.release();
+  }
+});
+
 // Add new transaction
 function validateTransactionInput(body) {
-  const validTypes = ['Spending', 'Income', 'Transfer', 'Bills'];
+  // GoalRelease is internal-only — created server-side by goal completion,
+  // not accepted from clients.
+  const validTypes = ['Spending', 'Income', 'Transfer', 'Bills', 'Savings'];
   const errors = [];
   if (!body.transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.transaction_date)) {
     errors.push('transaction_date must be in YYYY-MM-DD format');
@@ -361,6 +538,34 @@ app.get('/api/categories', async (req, res) => {
     `);
     const categories = result.rows.map(row => row.category);
     res.json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Top N spending categories for the current month.
+// Returns: [{ category, total }, ...] sorted by total descending.
+// Filters to type='Spending' (discretionary) by design — Bills are excluded
+// because they're fixed obligations and would dominate the chart every month.
+app.get('/api/spending-by-category', async (req, res) => {
+  try {
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 5;
+    if (limit > 20) limit = 20;
+    
+    const result = await pool.query(`
+      SELECT category, SUM(amount)::numeric AS total
+      FROM transactions
+      WHERE type = 'Spending'
+        AND month = date_trunc('month', CURRENT_DATE)::date
+        AND category IS NOT NULL
+        AND category != ''
+      GROUP BY category
+      ORDER BY total DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database error' });
