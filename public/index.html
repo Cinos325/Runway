@@ -267,36 +267,29 @@
         </div>
 
         <div class="tab-pane" id="planTab" data-tab="plan">
-            <div class="tab-placeholder">
-                <h2>Plan</h2>
-                <p>Recurring transactions, subscriptions, installments, and savings goals will live here.</p>
+            <div class="more-card">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Recurring transactions</h2>
+                    <!-- TODO stage 6: rename moreAddRecurringBtn → planAddRecurringBtn -->
+                    <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
+                </div>
+                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
+                <div id="moreRecurringList">
+                    <div class="empty-state">Loading…</div>
+                </div>
             </div>
         </div>
         
         <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
-            <!-- Sub-tab selector: three sections inside More -->
+            <!-- Sub-tab selector: two sections inside More (Recurring moved to Plan tab in stage 2) -->
             <div class="sub-tabs" role="tablist" aria-label="More sections">
-                <button type="button" class="sub-tab active" data-subtab="recurring" role="tab" aria-selected="true">Recurring</button>
-                <button type="button" class="sub-tab" data-subtab="history" role="tab" aria-selected="false">History</button>
+                <button type="button" class="sub-tab active" data-subtab="history" role="tab" aria-selected="true">History</button>
                 <button type="button" class="sub-tab" data-subtab="settings" role="tab" aria-selected="false">Settings</button>
             </div>
             
-            <!-- Recurring sub-tab -->
-            <div class="sub-tab-pane active" id="subRecurring" data-subtab="recurring" role="tabpanel">
-                <div class="more-card">
-                    <div class="card-header-row">
-                        <h2 class="card-heading">Recurring transactions</h2>
-                        <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
-                    </div>
-                    <div id="moreRecurringList">
-                        <div class="empty-state">Loading…</div>
-                    </div>
-                </div>
-            </div>
-            
             <!-- History sub-tab -->
-            <div class="sub-tab-pane" id="subHistory" data-subtab="history" role="tabpanel" hidden>
+            <div class="sub-tab-pane active" id="subHistory" data-subtab="history" role="tabpanel">
                 <div class="more-card">
                     <h2 class="card-heading" style="margin-bottom: 12px;">All transactions</h2>
                     <!-- Filters: type chips + category dropdown -->

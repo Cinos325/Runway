@@ -2104,9 +2104,7 @@ function switchSubTab(name) {
 }
 
 function loadActiveSubTabData(name) {
-    if (name === 'recurring') {
-        loadMoreRecurringList();
-    } else if (name === 'history') {
+    if (name === 'history') {
         loadMoreTransactionsList();
         populateCategoryFilter();
     } else if (name === 'settings') {
@@ -2125,11 +2123,23 @@ const moreRefreshOnSwitch = new MutationObserver(() => {
     const moreTab = document.getElementById('moreTab');
     if (moreTab && moreTab.classList.contains('active')) {
         const activeSub = document.querySelector('.sub-tab.active');
-        const name = activeSub ? activeSub.dataset.subtab : 'recurring';
+        const name = activeSub ? activeSub.dataset.subtab : 'history';
         loadActiveSubTabData(name);
     }
 });
 moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
+    attributes: true, attributeFilter: ['class']
+});
+
+// When the user switches to the Plan tab from the bottom nav, load the
+// recurring-transactions list. Same pattern as moreRefreshOnSwitch above.
+const planRefreshOnSwitch = new MutationObserver(() => {
+    const planTab = document.getElementById('planTab');
+    if (planTab && planTab.classList.contains('active')) {
+        loadMoreRecurringList();
+    }
+});
+planRefreshOnSwitch.observe(document.getElementById('planTab'), {
     attributes: true, attributeFilter: ['class']
 });
 
