@@ -598,12 +598,10 @@ const VALID_TYPES = ['Bills', 'Income', 'Savings', 'Spending'];
 
 function validateRecurring(body) {
   const errors = [];
-  if (!body.name || !String(body.name).trim()) errors.push('name is required');
+  // account is optional in the schema (column has a default and allows null)
   if (!VALID_TYPES.includes(body.type)) {
     errors.push(`type must be one of: ${VALID_TYPES.join(', ')}`);
   }
-  if (!body.payee || !String(body.payee).trim()) errors.push('payee is required');
-  if (!body.category || !String(body.category).trim()) errors.push('category is required');
   if (!body.account || !String(body.account).trim()) errors.push('account is required');
   const amountNum = parseFloat(body.amount);
   if (isNaN(amountNum) || amountNum <= 0) errors.push('amount must be a positive number');
