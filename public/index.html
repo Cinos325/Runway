@@ -90,14 +90,11 @@
         </div>
     </header>
     
-    <!-- Temporary holding place for icon buttons during the redesign.
-         These will be moved into the More tab in stage 5; for now they need to
-         exist in the DOM so the JS that wires their click handlers doesn't throw,
-         but they're hidden because the new persistent header doesn't show them. -->
+    <!-- Hidden holder for buttons referenced programmatically. Only editBaselineBtn
+         remains — moreEditBaselineBtn delegates to it. The tools-footer hosts
+         dynamically-injected diagnostic buttons. -->
     <div id="legacyHeaderActions" hidden>
         <button type="button" class="icon-button" id="editBaselineBtn" title="Edit baseline" aria-label="Edit baseline"></button>
-        <button type="button" class="icon-button" id="manageRecurringBtn" title="Manage recurring" aria-label="Manage recurring"></button>
-        <button type="button" class="icon-button" id="refreshBtn" title="Refresh" aria-label="Refresh"></button>
         <div class="tools-footer" id="toolsFooter"></div>
     </div>
     
@@ -232,8 +229,8 @@
                         <span class="plan-type-hint">Save toward something</span>
                     </button>
                 </div>
-                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
-                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
+                <!-- Filter chips: filter the recurring list by type. Pattern mirrors
+                     the history-list filter on the More tab. -->
                 <div class="history-filters">
                     <div class="history-filter-chips" id="planTypeChips" role="group" aria-label="Filter recurring by type">
                         <button type="button" class="filter-chip active" data-filter-type="">All</button>
@@ -242,8 +239,7 @@
                         <button type="button" class="filter-chip" data-filter-type="Spending">Spending</button>
                     </div>
                 </div>
-                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
-                <div id="moreRecurringList">
+                <div id="planRecurringList">
                     <div class="empty-state">Loading…</div>
                 </div>
             </div>
@@ -424,20 +420,7 @@
     <!-- Manage recurring transactions modal -->
     <div class="modal-overlay" id="recurringModal">
         <div class="modal modal-wide">
-            <div id="recurringListView">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h2 style="font-size: 18px;">Recurring transactions</h2>
-                    <button type="button" class="add-button" id="recurringAddNewBtn">+ Add new</button>
-                </div>
-                <div class="modal-body" id="recurringList">
-                    <div class="empty-state">Loading…</div>
-                </div>
-                <div class="modal-buttons" style="grid-template-columns: 1fr;">
-                    <button type="button" class="modal-btn-cancel" id="recurringCloseBtn">Close</button>
-                </div>
-            </div>
-            
-            <div id="recurringFormView" style="display: none;">
+            <div id="recurringFormView">
                 <h2 style="font-size: 18px; margin-bottom: 4px;" id="recurringFormTitle">Add recurring transaction</h2>
                 <p class="modal-subtitle">These appear in your spending power calculation as planned payments (except Income, which adds to it).</p>
                 <div class="modal-body">

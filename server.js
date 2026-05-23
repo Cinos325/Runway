@@ -134,25 +134,6 @@ app.get('/api/installments', async (req, res) => {
   }
 });
 
-// Auto-detected savings plans: recurring Savings transactions with an end_date.
-// These appear in the Goals card alongside open-ended goals from savings_goals table.
-app.get('/api/savings-plans', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        id, name, payee, category, account, frequency,
-        start_date, end_date,
-        payment_amount, total_periods, target_amount,
-        amount_saved, payments_made, amount_remaining, pct_saved
-      FROM savings_plan_progress
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
 // ===== Savings goals =====
 
 function validateGoalInput(body) {
@@ -324,64 +305,6 @@ app.post('/api/goals/:id/complete', async (req, res) => {
     await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Failed to complete goal' });
-  } finally {
-    client.release();
-  }
-});
-
-// DEPRECATED: Saving plans concept dropped from UI. Endpoint
-// retained for rollback ability; remove in stage 6 if unmissed. The
-// underlying savings_plan_progress view is similarly retained.
-app.post('/api/savings-plans/:id/complete', async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
-  
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    
-    // Look up the plan from the savings_plan_progress view to get current saved amount + category
-    const planQ = await client.query(
-      `SELECT id, name, category, amount_saved
-       FROM savings_plan_progress
-       WHERE id = $1`,
-      [id]
-    );
-    if (planQ.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Savings plan not found (might already be inactive or missing end_date)' });
-    }
-    const plan = planQ.rows[0];
-    const amountSaved = parseFloat(plan.amount_saved || 0);
-    
-    // Create the GoalRelease transaction for the released amount
-    if (amountSaved > 0) {
-      await client.query(
-        `INSERT INTO transactions
-          (transaction_date, type, amount, category, description, payee, account)
-         VALUES (CURRENT_DATE, 'GoalRelease', $1, $2, $3, 'Goal completion', NULL)`,
-        [amountSaved, plan.category, `Released $${amountSaved.toFixed(2)} from plan: ${plan.name}`]
-      );
-    }
-    
-    // Deactivate the recurring template itself (the plan's source)
-    await client.query(
-      `UPDATE recurring_transactions
-       SET is_active = false
-       WHERE id = $1`,
-      [id]
-    );
-    
-    await client.query('COMMIT');
-    res.json({
-      plan_id: id,
-      released_amount: amountSaved,
-      released: amountSaved > 0,
-    });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Failed to complete savings plan' });
   } finally {
     client.release();
   }

@@ -900,31 +900,10 @@ saveBaselineBtn.addEventListener('click', async () => {
 });
 
 // ===== Recurring transactions modal =====
+// Modal only renders the form view now; the picker on the Plan tab is the
+// entry point. List management happens on the Plan tab itself.
 const recurringModal = document.getElementById('recurringModal');
-const recurringListView = document.getElementById('recurringListView');
-const recurringFormView = document.getElementById('recurringFormView');
-const recurringList = document.getElementById('recurringList');
 let editingRecurringId = null;  // null = adding new
-
-function showRecurringList() {
-    recurringListView.style.display = '';
-    recurringFormView.style.display = 'none';
-}
-
-function showRecurringForm() {
-    recurringListView.style.display = 'none';
-    recurringFormView.style.display = '';
-}
-
-document.getElementById('manageRecurringBtn').addEventListener('click', async () => {
-    showRecurringList();
-    recurringModal.classList.add('active');
-    await loadRecurringList();
-});
-
-document.getElementById('recurringCloseBtn').addEventListener('click', () => {
-    recurringModal.classList.remove('active');
-});
 
 closeOnBackdropClick(recurringModal, () => recurringModal.classList.remove('active'));
 
@@ -963,85 +942,10 @@ function transactionBadge(type) {
     return '';
 }
 
-async function loadRecurringList() {
-    try {
-        const response = await fetch(`${API_URL}/recurring`);
-        const items = await response.json();
-        
-        if (items.length === 0) {
-            recurringList.innerHTML = '<div class="empty-state">No recurring transactions yet.</div>';
-            return;
-        }
-        
-        // Group by type for readability
-        const groups = {};
-        items.forEach(item => {
-            if (!groups[item.type]) groups[item.type] = [];
-            groups[item.type].push(item);
-        });
-        
-        const typeOrder = ['Income', 'Bills', 'Savings', 'Spending'];
-        let html = '';
-        typeOrder.forEach(type => {
-            if (!groups[type]) return;
-            html += `<div class="section-header"><div class="section-title">${type}</div></div>`;
-            groups[type].forEach(item => {
-                const amount = parseFloat(item.amount).toFixed(2);
-                const meta = [
-                    item.frequency,
-                    item.payee,
-                    item.category,
-                    item.end_date ? `until ${item.end_date.slice(0,10)}` : null,
-                ].filter(Boolean).join(' · ');
-                const inactiveClass = item.is_active ? '' : ' inactive';
-                html += `
-                    <div class="recurring-row${inactiveClass}">
-                        <div class="recurring-info">
-                            <div class="recurring-name">${escapeHtml(item.name)} — $${amount}</div>
-                            <div class="recurring-meta">${escapeHtml(meta)}${item.is_active ? '' : ' · inactive'}</div>
-                        </div>
-                        <div class="recurring-actions">
-                            <button data-action="edit" data-id="${item.id}">Edit</button>
-                            <button data-action="delete" data-id="${item.id}" class="danger">Delete</button>
-                        </div>
-                    </div>
-                `;
-            });
-        });
-        recurringList.innerHTML = html;
-    } catch (err) {
-        console.error('Failed to load recurring:', err);
-        recurringList.innerHTML = '<div class="empty-state">Failed to load.</div>';
-    }
-}
-
-// Delegated click handler for edit/delete buttons in the list
-recurringList.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const id = parseInt(btn.dataset.id, 10);
-    const action = btn.dataset.action;
-    
-    if (action === 'edit') {
-        try {
-            const resp = await fetch(`${API_URL}/recurring`);
-            const items = await resp.json();
-            const item = items.find(i => i.id === id);
-            if (!item) return;
-            openRecurringFormForEdit(item);
-        } catch (err) { console.error(err); }
-    } else if (action === 'delete') {
-        if (!confirm('Delete this recurring transaction? This cannot be undone.')) return;
-        try {
-            const resp = await fetch(`${API_URL}/recurring/${id}`, { method: 'DELETE' });
-            if (!resp.ok) throw new Error('Delete failed');
-            await loadRecurringList();
-            await loadSpendingPower();
-        } catch (err) {
-            alert('Failed to delete.');
-            console.error(err);
-        }
-    }
+// Cancel button on the recurring modal form closes the modal entirely.
+// (Previously returned to a list view inside the modal; that view is gone.)
+document.getElementById('recurringFormCancelBtn').addEventListener('click', () => {
+    recurringModal.classList.remove('active');
 });
 
 // ===== Add/edit form =====
@@ -1075,14 +979,6 @@ function syncPayTodayDefault() {
 }
 recTypeSelect.addEventListener('change', syncPayTodayDefault);
 
-document.getElementById('recurringAddNewBtn').addEventListener('click', () => {
-    openRecurringFormForAdd();
-});
-
-document.getElementById('recurringFormCancelBtn').addEventListener('click', () => {
-    showRecurringList();
-});
-
 function clearRecurringForm() {
     document.getElementById('recName').value = '';
     document.getElementById('recType').value = 'Bills';
@@ -1107,7 +1003,6 @@ function openRecurringFormForAdd() {
     recActiveRow.style.display = 'none';
     payTodayRow.style.display = '';  // show the "pay today" option only when adding
     syncPayTodayDefault();
-    showRecurringForm();
 }
 
 function openRecurringFormForEdit(item) {
@@ -1138,7 +1033,6 @@ function openRecurringFormForEdit(item) {
     setToggled(recIsActiveBtn, !!item.is_active);
     recActiveRow.style.display = '';
     payTodayRow.style.display = 'none';  // can't retroactively pay today on edit
-    showRecurringForm();
 }
 
 // ===== Plan-type-aware modal opening (stage 4b) =====
@@ -1342,8 +1236,8 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
             throw new Error((err.error || 'Save failed') + detail);
         }
         
-        showRecurringList();
-        await loadRecurringList();
+        // Close modal; the planTab MutationObserver will refresh the list
+        recurringModal.classList.remove('active');
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
@@ -1425,25 +1319,6 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e)
     }
 });
 
-// Refresh button: re-fetch all dynamic data and briefly spin the icon to acknowledge the action
-document.getElementById('refreshBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('refreshBtn');
-    btn.classList.add('spinning');
-    try {
-        await Promise.all([
-            loadSpendingPower(),
-            loadRecentTransactions(),
-            loadGoals(),
-            loadCategories(),
-            loadAccounts(),
-        ]);
-    } finally {
-        // Keep the spin running for at least 600ms (one full rotation) so the feedback feels
-        // deliberate even if the requests came back instantly.
-        setTimeout(() => btn.classList.remove('spinning'), 600);
-    }
-});
-
 // ============================================
 // Bottom navigation: tab switching (stage 1 of redesign)
 // ============================================
@@ -1506,8 +1381,8 @@ if (spToggle && phBreakdown) {
 // Filter state for the Plan tab recurring list. Default empty = show all types.
 const planFilters = { type: '' };
 
-async function loadMoreRecurringList() {
-    const target = document.getElementById('moreRecurringList');
+async function loadPlanRecurringList() {
+    const target = document.getElementById('planRecurringList');
     if (!target) return;
     try {
         const response = await fetch(`${API_URL}/recurring`);
@@ -1579,12 +1454,12 @@ document.querySelectorAll('#planTypeChips .filter-chip').forEach(chip => {
         document.querySelectorAll('#planTypeChips .filter-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         planFilters.type = chip.dataset.filterType || '';
-        loadMoreRecurringList();
+        loadPlanRecurringList();
     });
 });
 
 // Delegated handler for edit/toggle/delete actions in the recurring list
-document.getElementById('moreRecurringList').addEventListener('click', async (e) => {
+document.getElementById('planRecurringList').addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const id = parseInt(btn.dataset.recId, 10);
@@ -1614,7 +1489,7 @@ document.getElementById('moreRecurringList').addEventListener('click', async (e)
                 body: JSON.stringify({ ...item, is_active: !item.is_active }),
             });
             if (!updateResp.ok) throw new Error('Update failed');
-            await loadMoreRecurringList();
+            await loadPlanRecurringList();
             await loadSpendingPower();
             await loadGoals();
         } catch (err) {
@@ -1626,7 +1501,7 @@ document.getElementById('moreRecurringList').addEventListener('click', async (e)
         try {
             const resp = await fetch(`${API_URL}/recurring/${id}`, { method: 'DELETE' });
             if (!resp.ok) throw new Error('Delete failed');
-            await loadMoreRecurringList();
+            await loadPlanRecurringList();
             await loadSpendingPower();
             await loadGoals();
         } catch (err) {
@@ -1653,7 +1528,7 @@ document.querySelectorAll('.plan-type-btn').forEach(btn => {
 // Refresh the More recurring list whenever the modal closes (in case something was edited)
 const refreshRecurringOnClose = new MutationObserver(() => {
     if (!recurringModal.classList.contains('active')) {
-        loadMoreRecurringList();
+        loadPlanRecurringList();
     }
 });
 refreshRecurringOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
@@ -1882,7 +1757,7 @@ moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
 const planRefreshOnSwitch = new MutationObserver(() => {
     const planTab = document.getElementById('planTab');
     if (planTab && planTab.classList.contains('active')) {
-        loadMoreRecurringList();
+        loadPlanRecurringList();
     }
 });
 planRefreshOnSwitch.observe(document.getElementById('planTab'), {

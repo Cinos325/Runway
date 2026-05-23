@@ -392,12 +392,6 @@ body {
     fill: none;
 }
 
-#manageRecurringBtn svg {
-    width: 22px;
-    height: 22px;
-    stroke-width: 1.7;
-}
-
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -1492,34 +1486,6 @@ body {
 /* ============================================
    "This repeats" section in the Add form (stage 4)
    ============================================ */
-
-/* TODO stage 6: remove .form-repeats-divider and .repeats-fields rules below.
-   The Add tab no longer has a repeats section (stripped in stage 5); these
-   rules are dead code. Leaving in place until the dedicated cleanup pass. */
-/* Divider + toggle row between regular fields and the conditional repeats section */
-.form-repeats-divider {
-    margin-top: 8px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-divider-soft);
-    margin-bottom: 16px;
-}
-
-/* Hidden when its parent (the row) has [hidden]; uses native [hidden] attribute */
-.form-repeats-divider[hidden] {
-    display: none;
-}
-
-/* The collapsible fields section. [hidden] attribute hides cleanly. */
-.repeats-fields {
-    margin-bottom: 16px;
-    padding: 16px;
-    background: var(--bg-button-secondary);
-    border-radius: 8px;
-}
-
-.repeats-fields[hidden] {
-    display: none;
-}
 
 /* Small hint text under inputs (e.g. "auto-filled from payee + frequency") */
 .field-hint {
