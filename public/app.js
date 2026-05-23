@@ -549,11 +549,6 @@ document.querySelectorAll('.type-btn').forEach(btn => {
         document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         currentType = this.dataset.type;
-        // Recompute whether the "this repeats" toggle should be available.
-        // Transfer is conceptually a one-time event, so the toggle is hidden then.
-        updateRepeatsVisibility();
-        // If the payee already has a value, refresh the auto-name preview
-        updateAutoName();
     });
 });
 
@@ -576,226 +571,14 @@ function setTypeButton(type) {
     const target = document.querySelector(`.type-btn[data-type="${type}"]`);
     if (target) target.classList.add('active');
     currentType = type;
-    updateRepeatsVisibility();
 }
 
-// ============================================
-// "This repeats" toggle and conditional fields (stage 4)
-// ============================================
-//
-// When isRepeating = true, the form submits to /api/recurring instead of /api/transactions.
-// The toggle is hidden when type=Transfer (no recurring transfers).
-
-let isRepeating = false;
-
-const repeatsRow = document.getElementById('repeatsRow');
-const repeatsToggle = document.getElementById('repeatsToggle');
-const repeatsFields = document.getElementById('repeatsFields');
-const repName = document.getElementById('repName');
-const repFrequency = document.getElementById('repFrequency');
-const repDayOfMonth = document.getElementById('repDayOfMonth');
-const repNumPayments = document.getElementById('repNumPayments');
-const repEndPreview = document.getElementById('repEndPreview');
-const repTotalGroup = document.getElementById('repTotalGroup');
-const repTotalAmount = document.getElementById('repTotalAmount');
-const addPayTodayToggle = document.getElementById('addPayTodayToggle');
-const payeeInput = document.getElementById('payee');
-const amountInput = document.getElementById('amount');
-
-// Two-way sync between Amount (per-payment) and Total amount (the calculator helper).
-// The Amount field is the source of truth for saving; the Total field is purely a UI
-// convenience. When the user types in either, the other updates. Number of payments
-// must be set, otherwise the Total field is hidden (the math has no operand).
-//
-// A 'syncing' flag prevents infinite recursion (typing in one triggers an input event
-// on the other if we just set its value).
-let syncing = false;
-
-function syncTotalFromAmount() {
-    if (syncing) return;
-    const n = parseInt(repNumPayments.value, 10);
-    const per = parseFloat(amountInput.value);
-    if (isNaN(n) || n < 1 || isNaN(per)) {
-        // Can't compute; leave Total blank
-        syncing = true;
-        repTotalAmount.value = '';
-        syncing = false;
-        return;
-    }
-    syncing = true;
-    repTotalAmount.value = (per * n).toFixed(2);
-    syncing = false;
-}
-
-function syncAmountFromTotal() {
-    if (syncing) return;
-    const n = parseInt(repNumPayments.value, 10);
-    const total = parseFloat(repTotalAmount.value);
-    if (isNaN(n) || n < 1 || isNaN(total)) return;
-    syncing = true;
-    amountInput.value = (total / n).toFixed(2);
-    syncing = false;
-}
-
-// Total field visibility: only relevant when "this repeats" is on AND number of
-// payments is set. Otherwise hidden (it has no meaning).
-function updateTotalFieldVisibility() {
-    const n = parseInt(repNumPayments.value, 10);
-    const shouldShow = isRepeating && !isNaN(n) && n >= 1;
-    if (shouldShow) {
-        repTotalGroup.removeAttribute('hidden');
-        syncTotalFromAmount();  // populate it based on current Amount
-    } else {
-        repTotalGroup.setAttribute('hidden', '');
-    }
-}
-
-repTotalAmount.addEventListener('input', syncAmountFromTotal);
-amountInput.addEventListener('input', syncTotalFromAmount);
-
-function updateRepeatsVisibility() {
-    // Hide the toggle row entirely on Transfer (and force isRepeating off if active)
-    if (currentType === 'Transfer') {
-        repeatsRow.setAttribute('hidden', '');
-        if (isRepeating) {
-            isRepeating = false;
-            repeatsToggle.classList.remove('active');
-            repeatsToggle.setAttribute('aria-pressed', 'false');
-            repeatsFields.setAttribute('hidden', '');
-        }
-    } else {
-        repeatsRow.removeAttribute('hidden');
-    }
-    updateSubmitButtonLabel();
-}
-
+// Submit-button label changes only in edit mode now that the Add tab handles
+// single-instance transactions only.
 function updateSubmitButtonLabel() {
     const btn = document.querySelector('#transactionForm .submit-btn');
     if (!btn) return;
-    if (editingTransactionId !== null) {
-        btn.textContent = 'Update Transaction';
-        return;
-    }
-    if (!isRepeating) {
-        btn.textContent = 'Add Transaction';
-        return;
-    }
-    // Repeating: label differs by type, and finite ("number of payments" set) is
-    // called a "plan", while indefinite is "recurring".
-    const hasEnd = repNumPayments.value.trim() && parseInt(repNumPayments.value, 10) >= 1;
-    if (hasEnd) {
-        // Finite — a structured plan
-        if (currentType === 'Spending') btn.textContent = 'Save Installment Plan';
-        else if (currentType === 'Savings') btn.textContent = 'Save Saving Plan';
-        else if (currentType === 'Bills') btn.textContent = 'Save Bill Plan';
-        else if (currentType === 'Income') btn.textContent = 'Save Income Plan';
-        else btn.textContent = 'Save Plan';
-    } else {
-        // Indefinite — just a recurring template
-        if (currentType === 'Bills') btn.textContent = 'Save Recurring Bill';
-        else if (currentType === 'Income') btn.textContent = 'Save Recurring Income';
-        else if (currentType === 'Savings') btn.textContent = 'Save Recurring Saving';
-        else if (currentType === 'Spending') btn.textContent = 'Save Recurring Spending';
-        else btn.textContent = 'Save Recurring';
-    }
-}
-
-repeatsToggle.addEventListener('click', () => {
-    isRepeating = !isRepeating;
-    repeatsToggle.classList.toggle('active', isRepeating);
-    repeatsToggle.setAttribute('aria-pressed', isRepeating ? 'true' : 'false');
-    if (isRepeating) {
-        repeatsFields.removeAttribute('hidden');
-        updateAutoName();
-        updateRepEndPreview();
-    } else {
-        repeatsFields.setAttribute('hidden', '');
-    }
-    updateTotalFieldVisibility();
-    updateSubmitButtonLabel();
-});
-
-addPayTodayToggle.addEventListener('click', () => {
-    const on = !addPayTodayToggle.classList.contains('active');
-    addPayTodayToggle.classList.toggle('active', on);
-    addPayTodayToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-});
-
-// Auto-derive the recurring entry's "Name" from payee + frequency.
-// Updates only when the field hasn't been manually edited (the dataset.userEdited flag tracks this).
-function updateAutoName() {
-    if (!isRepeating) return;
-    if (repName.dataset.userEdited === 'true') return;
-    const payee = payeeInput.value.trim();
-    if (!payee) {
-        repName.value = '';
-        return;
-    }
-    const freqLabel = repFrequency.options[repFrequency.selectedIndex].text.toLowerCase();
-    repName.value = `${payee} ${freqLabel}`;
-}
-
-// Track when the user has manually edited the name field; from then on, don't auto-overwrite
-repName.addEventListener('input', () => {
-    repName.dataset.userEdited = 'true';
-});
-
-// Trigger auto-name on payee or frequency changes
-payeeInput.addEventListener('input', updateAutoName);
-repFrequency.addEventListener('change', () => {
-    updateAutoName();
-    updateRepEndPreview();
-});
-
-// End-date preview from start_date (today) + frequency + number of payments
-function updateRepEndPreview() {
-    const n = parseInt(repNumPayments.value, 10);
-    if (isNaN(n) || n < 1) {
-        repEndPreview.textContent = '';
-        updateSubmitButtonLabel();
-        return;
-    }
-    const startStr = transactionDateInput.value || todayString();
-    const freq = repFrequency.value;
-    const end = computeEndDateFromNumPaymentsAdd(startStr, freq, n);
-    repEndPreview.textContent = `= ends ${end} (${n} payment${n === 1 ? '' : 's'})`;
-    updateSubmitButtonLabel();
-}
-
-// Compute end_date from start_date + frequency + N. Inclusive: N payments means
-// the first on start_date and the Nth on the returned end_date.
-function computeEndDateFromNumPaymentsAdd(startDateStr, frequency, n) {
-    const d = new Date(startDateStr + 'T00:00:00');
-    const periods = n - 1;
-    if (frequency === 'monthly')  d.setMonth(d.getMonth() + periods);
-    else if (frequency === 'weekly')   d.setDate(d.getDate() + periods * 7);
-    else if (frequency === 'biweekly') d.setDate(d.getDate() + periods * 14);
-    else if (frequency === 'yearly')   d.setFullYear(d.getFullYear() + periods);
-    return d.toISOString().slice(0, 10);
-}
-
-repNumPayments.addEventListener('input', () => {
-    updateRepEndPreview();
-    updateTotalFieldVisibility();
-});
-transactionDateInput.addEventListener('input', updateRepEndPreview);
-
-// Reset the repeats section to its default state (called after successful submit)
-function resetRepeats() {
-    isRepeating = false;
-    repeatsToggle.classList.remove('active');
-    repeatsToggle.setAttribute('aria-pressed', 'false');
-    repeatsFields.setAttribute('hidden', '');
-    repName.value = '';
-    delete repName.dataset.userEdited;
-    repFrequency.value = 'monthly';
-    repDayOfMonth.value = '';
-    repNumPayments.value = '';
-    repEndPreview.textContent = '';
-    repTotalAmount.value = '';
-    repTotalGroup.setAttribute('hidden', '');
-    addPayTodayToggle.classList.remove('active');
-    addPayTodayToggle.setAttribute('aria-pressed', 'false');
+    btn.textContent = editingTransactionId !== null ? 'Update Transaction' : 'Add Transaction';
 }
 
 function enterEditMode(t) {
@@ -817,13 +600,6 @@ function enterEditMode(t) {
     
     // Editing applies only to one-time transactions; force isRepeating off and hide
     // the repeats row so the user can't try to convert during edit.
-    if (isRepeating) {
-        isRepeating = false;
-        repeatsToggle.classList.remove('active');
-        repeatsToggle.setAttribute('aria-pressed', 'false');
-        repeatsFields.setAttribute('hidden', '');
-    }
-    repeatsRow.setAttribute('hidden', '');
     updateSubmitButtonLabel();
     
     // Switch to the Add tab so the form is actually visible
@@ -842,8 +618,6 @@ function exitEditMode() {
     setTypeButton('Spending');
     // form.reset() clears the date input too, so restore today
     transactionDateInput.value = todayString();
-    // setTypeButton('Spending') already called updateRepeatsVisibility(),
-    // which shows the repeats row for non-Transfer types.
     updateSubmitButtonLabel();
 }
 
@@ -857,112 +631,51 @@ document.getElementById('transactionForm').addEventListener('submit', async func
     submitBtn.textContent = 'Saving...';
     submitBtn.disabled = true;
     
-    // Branch: are we creating a recurring entry, or a regular transaction?
-    // Recurring entries always create on a new entity in /api/recurring, even when
-    // editing isn't supported in this flow (edit-mode is only for one-time transactions).
-    const wantsRecurring = isRepeating && !isEditing;
-    
     try {
-        if (wantsRecurring) {
-            // Compute end_date from number of payments if provided
-            const startDate = transactionDateInput.value;
-            const freq = repFrequency.value;
-            const nRaw = repNumPayments.value.trim();
-            const n = nRaw ? parseInt(nRaw, 10) : null;
-            let endDate = null;
-            if (n && n >= 1 && startDate) {
-                endDate = computeEndDateFromNumPaymentsAdd(startDate, freq, n);
-            }
-            
-            const payload = {
-                name: repName.value.trim() || `${document.getElementById('payee').value.trim()} ${freq}`,
-                type: currentType,
-                payee: document.getElementById('payee').value.trim(),
-                category: document.getElementById('category').value.trim() || null,
-                amount: parseFloat(document.getElementById('amount').value),
-                account: document.getElementById('account').value.trim() || null,
-                description: document.getElementById('description').value.trim() || null,
-                frequency: freq,
-                day_of_month: repDayOfMonth.value || null,
-                start_date: startDate,
-                end_date: endDate,
-                create_first_payment_today: addPayTodayToggle.classList.contains('active'),
-            };
-            
-            const resp = await fetch(`${API_URL}/recurring`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                const detail = err.details ? '\n\n' + err.details.join('\n') : '';
-                throw new Error((err.error || 'Save failed') + detail);
-            }
-            
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = endDate ? 'Installment plan saved!' : 'Recurring transaction saved!';
-            successMsg.hidden = false;
-            successMsg.classList.add('show');
-            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
-            
-            await loadSpendingPower();
-            await loadRecentTransactions();
-            await loadTopCategories();
-            await loadGoals();
-            
-            // Reset form for next entry — stay on Add tab, ready to go
+        const transaction = {
+            transaction_date: transactionDateInput.value,
+            type: currentType,
+            amount: parseFloat(document.getElementById('amount').value),
+            category: document.getElementById('category').value,
+            description: document.getElementById('description').value,
+            payee: document.getElementById('payee').value,
+            account: document.getElementById('account').value,
+        };
+        
+        const url = isEditing
+            ? `${API_URL}/transactions/${editingTransactionId}`
+            : `${API_URL}/transactions`;
+        const method = isEditing ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transaction)
+        });
+        
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            const detail = err.details ? '\n\n' + err.details.join('\n') : '';
+            throw new Error((err.error || 'Save failed') + detail);
+        }
+        
+        const successMsg = document.getElementById('successMsg');
+        successMsg.textContent = isEditing ? 'Transaction updated!' : 'Transaction added!';
+        successMsg.hidden = false;
+        successMsg.classList.add('show');
+        setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
+        
+        await loadSpendingPower();
+        await loadRecentTransactions();
+        await loadTopCategories();
+        await loadGoals();
+        
+        if (isEditing) {
+            exitEditMode();
+        } else {
             this.reset();
             setTypeButton('Spending');
             transactionDateInput.value = todayString();
-            resetRepeats();
-        } else {
-            // One-time transaction: POST or PUT
-            const transaction = {
-                transaction_date: transactionDateInput.value,
-                type: currentType,
-                amount: parseFloat(document.getElementById('amount').value),
-                category: document.getElementById('category').value,
-                description: document.getElementById('description').value,
-                payee: document.getElementById('payee').value,
-                account: document.getElementById('account').value,
-            };
-            
-            const url = isEditing
-                ? `${API_URL}/transactions/${editingTransactionId}`
-                : `${API_URL}/transactions`;
-            const method = isEditing ? 'PUT' : 'POST';
-            
-            const response = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(transaction)
-            });
-            
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                const detail = err.details ? '\n\n' + err.details.join('\n') : '';
-                throw new Error((err.error || 'Save failed') + detail);
-            }
-            
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = isEditing ? 'Transaction updated!' : 'Transaction added!';
-            successMsg.hidden = false;
-            successMsg.classList.add('show');
-            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
-            
-            await loadSpendingPower();
-            await loadRecentTransactions();
-            await loadTopCategories();
-            await loadGoals();
-            
-            if (isEditing) {
-                exitEditMode();
-            } else {
-                this.reset();
-                setTypeButton('Spending');
-                transactionDateInput.value = todayString();
-            }
         }
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);

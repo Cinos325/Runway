@@ -1493,6 +1493,9 @@ body {
    "This repeats" section in the Add form (stage 4)
    ============================================ */
 
+/* TODO stage 6: remove .form-repeats-divider and .repeats-fields rules below.
+   The Add tab no longer has a repeats section (stripped in stage 5); these
+   rules are dead code. Leaving in place until the dedicated cleanup pass. */
 /* Divider + toggle row between regular fields and the conditional repeats section */
 .form-repeats-divider {
     margin-top: 8px;
