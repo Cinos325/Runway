@@ -598,20 +598,27 @@ const VALID_TYPES = ['Bills', 'Income', 'Savings', 'Spending'];
 
 function validateRecurring(body) {
   const errors = [];
-  // account is optional in the schema (column has a default and allows null)
+  if (!body.name || !String(body.name).trim()) errors.push('name is required');
   if (!VALID_TYPES.includes(body.type)) {
     errors.push(`type must be one of: ${VALID_TYPES.join(', ')}`);
   }
-  if (!body.account || !String(body.account).trim()) errors.push('account is required');
+  if (!body.payee || !String(body.payee).trim()) errors.push('payee is required');
+  // category and account are optional in the schema (both columns allow null;
+  // account has a default of 'Paypal'). Earlier validator required them,
+  // which broke PUT for rows that had null in either field.
   const amountNum = parseFloat(body.amount);
   if (isNaN(amountNum) || amountNum <= 0) errors.push('amount must be a positive number');
   if (!VALID_FREQUENCIES.includes(body.frequency)) {
     errors.push(`frequency must be one of: ${VALID_FREQUENCIES.join(', ')}`);
   }
-  if (!body.start_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.start_date)) {
+  // Accept either YYYY-MM-DD or a full ISO timestamp; Postgres serializes
+  // date columns as timestamps when round-tripping through JSON, so the
+  // client may resend them in that form (e.g., on pause/resume).
+  const dateRegex = /^\d{4}-\d{2}-\d{2}(T.*)?$/;
+  if (!body.start_date || !dateRegex.test(body.start_date)) {
     errors.push('start_date must be in YYYY-MM-DD format');
   }
-  if (body.end_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.end_date)) {
+  if (body.end_date && !dateRegex.test(body.end_date)) {
     errors.push('end_date must be in YYYY-MM-DD format if provided');
   }
   return errors;

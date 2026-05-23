@@ -1790,19 +1790,33 @@ if (spToggle && phBreakdown) {
 // Most of the heavy lifting is reused: the existing recurring modal handles
 // add/edit, the existing transaction edit/delete flow handles inline actions.
 
+// Filter state for the Plan tab recurring list. Default empty = show all types.
+const planFilters = { type: '' };
+
 async function loadMoreRecurringList() {
     const target = document.getElementById('moreRecurringList');
     if (!target) return;
     try {
         const response = await fetch(`${API_URL}/recurring`);
-        const items = await response.json();
+        let items = await response.json();
+        
+        // Apply type filter (client-side — the list is small enough that fetching
+        // everything and filtering locally is simpler than passing a query param
+        // and re-fetching on every chip click).
+        if (planFilters.type) {
+            items = items.filter(item => item.type === planFilters.type);
+        }
         
         if (!Array.isArray(items) || items.length === 0) {
-            target.innerHTML = '<div class="empty-state">No recurring transactions yet.</div>';
+            const msg = planFilters.type
+                ? `No ${planFilters.type} recurring transactions.`
+                : 'No recurring transactions yet.';
+            target.innerHTML = `<div class="empty-state">${msg}</div>`;
             return;
         }
         
-        // Group by type for readability (same grouping as the modal version)
+        // Group by type for readability (within the filtered subset; if filter
+        // is active there's only one group, but the same code handles it cleanly)
         const groups = {};
         items.forEach(item => {
             if (!groups[item.type]) groups[item.type] = [];
@@ -1830,7 +1844,7 @@ async function loadMoreRecurringList() {
                             <div class="more-recurring-meta">${escapeHtml(meta)}${item.is_active ? '' : ' · inactive'}</div>
                             <div class="more-recurring-row-actions">
                                 <button type="button" data-action="edit" data-rec-id="${item.id}">Edit</button>
-                                <button type="button" data-action="toggle-active" data-rec-id="${item.id}">${item.is_active ? 'Pause' : 'Resume'}</button>
+                                <button type="button" data-action="toggle-active" data-rec-id="${item.id}" class="${item.is_active ? '' : 'resume'}">${item.is_active ? 'Pause' : 'Resume'}</button>
                                 <button type="button" class="danger" data-action="delete" data-rec-id="${item.id}">Delete</button>
                             </div>
                         </div>
@@ -1845,6 +1859,16 @@ async function loadMoreRecurringList() {
         target.innerHTML = '<div class="empty-state">Could not load.</div>';
     }
 }
+
+// Wire up the plan-tab type filter chips. Same pattern as historyTypeChips.
+document.querySelectorAll('#planTypeChips .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        document.querySelectorAll('#planTypeChips .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        planFilters.type = chip.dataset.filterType || '';
+        loadMoreRecurringList();
+    });
+});
 
 // Delegated handler for edit/toggle/delete actions in the recurring list
 document.getElementById('moreRecurringList').addEventListener('click', async (e) => {

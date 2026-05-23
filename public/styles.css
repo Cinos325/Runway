@@ -1573,7 +1573,6 @@ body {
     margin-bottom: 0;
 }
 
-/* Recurring list items on the More tab */
 .more-recurring-item {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -1583,8 +1582,22 @@ body {
     align-items: center;
 }
 
-.more-recurring-item:last-child {
-    border-bottom: none;
+.more-recurring-item.inactive .more-recurring-name,
+.more-recurring-item.inactive .more-recurring-meta,
+.more-recurring-item.inactive .more-recurring-amount {
+    opacity: 0.5;
+}
+
+/* Resume button — positive recovery action, visually distinct from Pause */
+.more-recurring-row-actions button.resume {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.more-recurring-row-actions button.resume:hover {
+    background: color-mix(in srgb, var(--success) 88%, black);
+    border-color: color-mix(in srgb, var(--success) 88%, black);
 }
 
 .more-recurring-item.inactive {
@@ -1935,11 +1948,22 @@ input[type="date"] {
 }
 
 /* ===== Plan type picker (Plan tab) ===== */
+.picker-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
 .plan-type-picker {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
-    margin: 0 0 16px 0;
+    margin: 0 0 24px 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-divider-soft);
 }
 
 @media (min-width: 600px) {
@@ -1953,8 +1977,8 @@ input[type="date"] {
     flex-direction: column;
     align-items: flex-start;
     padding: 12px;
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #d0d0d0);
+    background: var(--bg-card);
+    border: 1px solid var(--border-input);
     border-radius: 8px;
     cursor: pointer;
     text-align: left;
@@ -1963,22 +1987,23 @@ input[type="date"] {
 }
 
 .plan-type-btn:hover {
-    background: var(--surface-hover, #f5f5f5);
-    border-color: var(--accent, #4a90e2);
+    background: var(--bg-button-secondary-hover);
+    border-color: var(--accent);
 }
 
 .plan-type-btn:active {
+    background: var(--bg-button-secondary-active);
     transform: translateY(1px);
 }
 
 .plan-type-label {
     font-weight: 600;
     font-size: 14px;
-    color: var(--text, #222);
+    color: var(--text-primary);
 }
 
 .plan-type-hint {
     font-size: 11px;
-    color: var(--text-muted, #777);
+    color: var(--text-secondary);
     margin-top: 2px;
 }

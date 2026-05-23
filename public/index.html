@@ -269,6 +269,7 @@
                 <!-- Plan type picker: four ways to create a plan. The first three
                      open the recurring modal preconfigured; "Open goal" opens the
                      open-goal modal (separate table). -->
+                <div class="picker-label">Add a plan</div>
                 <div class="plan-type-picker">
                     <button type="button" class="plan-type-btn" data-plan-type="subscription">
                         <span class="plan-type-label">+ Subscription</span>
@@ -288,6 +289,15 @@
                     </button>
                 </div>
                 <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
+                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
+                <div class="history-filters">
+                    <div class="history-filter-chips" id="planTypeChips" role="group" aria-label="Filter recurring by type">
+                        <button type="button" class="filter-chip active" data-filter-type="">All</button>
+                        <button type="button" class="filter-chip" data-filter-type="Bills">Bills</button>
+                        <button type="button" class="filter-chip" data-filter-type="Savings">Savings</button>
+                        <button type="button" class="filter-chip" data-filter-type="Spending">Spending</button>
+                    </div>
+                </div>
                 <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
                 <div id="moreRecurringList">
                     <div class="empty-state">Loading…</div>
