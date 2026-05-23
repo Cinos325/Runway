@@ -29,6 +29,7 @@ app.get('/api/spending-power', async (req, res) => {
         current_month_income,
         planned_payments_total,
         current_month_spending,
+        current_month_adhoc_obligations,
         current_month
       FROM spending_power
     `);
@@ -675,12 +676,16 @@ app.post('/api/recurring', async (req, res) => {
     if (create_first_payment_today) {
       // Insert a transactions row dated today, mirroring the recurring entry.
       // The transactions table's "month" column gets computed from today's date.
+      // Link the first-payment-today transaction back to the recurring
+      // template just inserted, so spending_power treats it as already
+      // accounted-for (not as ad-hoc).
+      const recurringId = result.rows[0].id;
       const txResult = await client.query(`
-        INSERT INTO transactions (transaction_date, month, type, amount, category, description, payee, account)
+        INSERT INTO transactions (transaction_date, month, type, amount, category, description, payee, account, recurring_id)
         VALUES (
           CURRENT_DATE,
           date_trunc('month', CURRENT_DATE)::date,
-          $1, $2, $3, $4, $5, $6
+          $1, $2, $3, $4, $5, $6, $7
         )
         RETURNING *
       `, [
@@ -690,6 +695,7 @@ app.post('/api/recurring', async (req, res) => {
         description || null,
         payee.trim(),
         account || null,
+        recurringId,
       ]);
       firstTransaction = txResult.rows[0];
     }
