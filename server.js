@@ -329,9 +329,9 @@ app.post('/api/goals/:id/complete', async (req, res) => {
   }
 });
 
-// Complete an auto-detected savings plan. Mirrors /api/goals/:id/complete but
-// operates on a recurring_transactions row instead of a savings_goals row.
-// The :id here is the recurring_transactions.id, not a savings_goals.id.
+// DEPRECATED: Saving plans concept dropped from UI. Endpoint
+// retained for rollback ability; remove in stage 6 if unmissed. The
+// underlying savings_plan_progress view is similarly retained.
 app.post('/api/savings-plans/:id/complete', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });

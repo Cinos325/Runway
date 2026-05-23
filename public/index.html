@@ -127,8 +127,8 @@
                 </div>
             </div>
             
-            <!-- Goals card: installments (auto), saving plans (auto from recurring Savings),
-                 and open goals (manually created for open-ended saving). -->
+            <!-- Goals card: installments (auto-detected from recurring Spending with
+                 end_date) and open goals (manually created for open-ended saving). -->
             <div class="goals-card" id="goalsCard">
                 <div class="goals-card-header">
                     <h2 class="goals-heading">Goals</h2>
@@ -138,11 +138,6 @@
                 <div class="goals-section" id="installmentsSection">
                     <div class="goals-section-title">Installments</div>
                     <div id="installmentsList"></div>
-                </div>
-                
-                <div class="goals-section" id="savingsPlansSection">
-                    <div class="goals-section-title">Saving plans</div>
-                    <div id="savingsPlansList"></div>
                 </div>
                 
                 <div class="goals-section" id="savingsGoalsSection">
@@ -270,9 +265,29 @@
             <div class="more-card">
                 <div class="card-header-row">
                     <h2 class="card-heading">Recurring transactions</h2>
-                    <!-- TODO stage 6: rename moreAddRecurringBtn → planAddRecurringBtn -->
-                    <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
                 </div>
+                <!-- Plan type picker: four ways to create a plan. The first three
+                     open the recurring modal preconfigured; "Open goal" opens the
+                     open-goal modal (separate table). -->
+                <div class="plan-type-picker">
+                    <button type="button" class="plan-type-btn" data-plan-type="subscription">
+                        <span class="plan-type-label">+ Subscription</span>
+                        <span class="plan-type-hint">Pay today, no end date</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="recurring">
+                        <span class="plan-type-label">+ Recurring</span>
+                        <span class="plan-type-hint">Bills, savings, or other</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="installment">
+                        <span class="plan-type-label">+ Installment</span>
+                        <span class="plan-type-hint">Bills paid in chunks</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="open-goal">
+                        <span class="plan-type-label">+ Open goal</span>
+                        <span class="plan-type-hint">Save toward something</span>
+                    </button>
+                </div>
+                <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
                 <!-- TODO stage 6: rename moreRecurringList → planRecurringList -->
                 <div id="moreRecurringList">
                     <div class="empty-state">Loading…</div>
