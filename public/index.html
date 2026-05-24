@@ -429,7 +429,7 @@
                         <input type="text" id="recName" placeholder="Phone bill, Netflix, etc.">
                     </div>
                     <div class="form-row-inline">
-                        <div class="form-group">
+                        <div class="form-group" id="recTypeField">
                             <label>Type</label>
                             <select id="recType">
                                 <option value="Bills">Bills</option>
@@ -438,9 +438,10 @@
                                 <option value="Income">Income</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Amount</label>
+                        <div class="form-group" id="recAmountField">
+                            <label id="recAmountLabel">Amount</label>
                             <input type="number" id="recAmount" step="0.01" placeholder="0.00">
+                            <div class="field-hint" id="recAmountHint" hidden></div>
                         </div>
                     </div>
                     <div class="form-group">

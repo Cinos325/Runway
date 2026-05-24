@@ -980,7 +980,9 @@ function syncPayTodayDefault() {
 recTypeSelect.addEventListener('change', syncPayTodayDefault);
 
 function clearRecurringForm() {
-    document.getElementById('recName').value = '';
+    const nameInput = document.getElementById('recName');
+    nameInput.value = '';
+    delete nameInput.dataset.userEdited;
     document.getElementById('recType').value = 'Bills';
     document.getElementById('recPayee').value = '';
     document.getElementById('recCategory').value = '';
@@ -996,12 +998,61 @@ function clearRecurringForm() {
     setToggled(payTodayToggle, false);
 }
 
+// Auto-derive the recurring entry's "Name" from the payee, unless the user
+// has typed in the Name field. Tracking via dataset.userEdited so manual
+// edits stick. Cleared by clearRecurringForm() on each open.
+function updateRecAutoName() {
+    const nameInput = document.getElementById('recName');
+    if (nameInput.dataset.userEdited === 'true') return;
+    const payee = document.getElementById('recPayee').value.trim();
+    nameInput.value = payee;
+}
+
+// For the installment plan type only: compute per-payment from total amount
+// and number of payments. Shown as a read-only preview hint under the
+// Amount field. Save handler does the same calculation before posting.
+function updateInstallmentPreview() {
+    if (recurringModal.dataset.planType !== 'installment') return;
+    const amountHint = document.getElementById('recAmountHint');
+    const total = parseFloat(recAmountInput.value);
+    const n = parseInt(recNumPaymentsInput.value, 10);
+    if (isNaN(total) || total <= 0 || isNaN(n) || n < 1) {
+        amountHint.textContent = 'Enter the full purchase price; per-payment computed below.';
+        return;
+    }
+    const perPayment = total / n;
+    const rounded = perPayment.toFixed(2);
+    const actualTotal = (parseFloat(rounded) * n).toFixed(2);
+    const drift = Math.abs(parseFloat(actualTotal) - total) > 0.005;
+    if (drift) {
+        amountHint.textContent = `= $${rounded} per payment × ${n} (rounds to $${actualTotal}, off by $${(total - actualTotal).toFixed(2)})`;
+    } else {
+        amountHint.textContent = `= $${rounded} per payment × ${n}`;
+    }
+}
+
+recAmountInput.addEventListener('input', updateInstallmentPreview);
+recNumPaymentsInput.addEventListener('input', updateInstallmentPreview);
+
+document.getElementById('recPayee').addEventListener('input', updateRecAutoName);
+document.getElementById('recName').addEventListener('input', () => {
+    // If the user clears the Name field, restore auto-fill behavior. Otherwise
+    // mark as user-edited so further payee changes don't overwrite.
+    const nameInput = document.getElementById('recName');
+    if (nameInput.value === '') {
+        delete nameInput.dataset.userEdited;
+    } else {
+        nameInput.dataset.userEdited = 'true';
+    }
+});
+
 function openRecurringFormForAdd() {
     editingRecurringId = null;
     clearRecurringForm();
     document.getElementById('recurringFormTitle').textContent = 'Add recurring transaction';
     recActiveRow.style.display = 'none';
     payTodayRow.style.display = '';  // show the "pay today" option only when adding
+    updateInstallmentPreview();
     syncPayTodayDefault();
 }
 
@@ -1052,20 +1103,32 @@ function openRecurringFormForPlanType(planType) {
 function applyPlanTypeToForm(planType) {
     const numPaymentsField = document.getElementById('recNumPayments').closest('.form-group');
     const endDatePreview = document.getElementById('recEndDatePreview');
+    const typeField = document.getElementById('recTypeField');
     const typeSelect = document.getElementById('recType');
     const titleEl = document.getElementById('recurringFormTitle');
+    const amountLabel = document.getElementById('recAmountLabel');
+    const amountHint = document.getElementById('recAmountHint');
+    const categoryInput = document.getElementById('recCategory');
     
     // Reset to default-visible state (matters when reopening the modal for a
     // different plan type without a full page reload).
     numPaymentsField.style.display = '';
     endDatePreview.style.display = '';
+    typeField.style.display = '';
     typeSelect.disabled = false;
     payTodayRow.style.display = '';
+    amountLabel.textContent = 'Amount';
+    amountHint.hidden = true;
+    amountHint.textContent = '';
     
     if (planType === 'subscription') {
         titleEl.textContent = 'New subscription';
-        // Subs are discretionary recurring Spending (games, streaming, etc.)
+        // Subs are universally type=Spending, category=Sub in this app's model.
+        // Hide the type field (defining property, not a flexible default) and
+        // pre-fill category so the user can see + override if needed.
         typeSelect.value = 'Spending';
+        typeField.style.display = 'none';
+        categoryInput.value = 'Sub';
         // No end date for subscriptions
         numPaymentsField.style.display = 'none';
         endDatePreview.style.display = 'none';
@@ -1086,7 +1149,11 @@ function applyPlanTypeToForm(planType) {
         // end date — locked so they consistently surface in installment_progress.
         typeSelect.value = 'Bills';
         typeSelect.disabled = true;
-        // Number of payments is the whole point of an installment — stays visible
+        // Amount field repurposed: user enters total purchase price; per-payment
+        // is computed below as a read-only preview, and divided on save.
+        amountLabel.textContent = 'Total amount';
+        amountHint.hidden = false;
+        amountHint.textContent = 'Enter the full purchase price; per-payment computed below.';
         // Pay-today hidden — installments start next period by convention
         setToggled(payTodayToggle, false);
         payTodayRow.style.display = 'none';
@@ -1101,11 +1168,18 @@ const clearPlanTypeOnClose = new MutationObserver(() => {
         // Reset field-hiding so the next open starts clean
         const numPaymentsField = document.getElementById('recNumPayments').closest('.form-group');
         const endDatePreview = document.getElementById('recEndDatePreview');
+        const typeField = document.getElementById('recTypeField');
         const typeSelect = document.getElementById('recType');
+        const amountLabel = document.getElementById('recAmountLabel');
+        const amountHint = document.getElementById('recAmountHint');
         numPaymentsField.style.display = '';
         endDatePreview.style.display = '';
+        typeField.style.display = '';
         typeSelect.disabled = false;
         payTodayRow.style.display = '';
+        amountLabel.textContent = 'Amount';
+        amountHint.hidden = true;
+        amountHint.textContent = '';
     }
 });
 clearPlanTypeOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
@@ -1194,13 +1268,22 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
     if (numPayments && numPayments >= 1 && startDate) {
         endDate = computeEndDateFromNumPayments(startDate, frequency, numPayments);
     }
+
+    // For installments, the Amount input holds the TOTAL purchase price;
+    // the DB stores per-payment. Divide here (number of payments was already
+    // parsed above for the end_date calculation).
+    const enteredAmount = parseFloat(recAmountInput.value);
+    const isInstallment = recurringModal.dataset.planType === 'installment';
+    const amountForPayload = isInstallment && numPayments && numPayments >= 1
+        ? parseFloat((enteredAmount / numPayments).toFixed(2))
+        : enteredAmount;
     
     const payload = {
         name: document.getElementById('recName').value.trim(),
         type: document.getElementById('recType').value,
         payee: document.getElementById('recPayee').value.trim(),
         category: document.getElementById('recCategory').value.trim() || null,
-        amount: parseFloat(recAmountInput.value),
+        amount: amountForPayload,
         account: document.getElementById('recAccount').value.trim() || null,
         description: document.getElementById('recDescription').value.trim() || null,
         frequency,

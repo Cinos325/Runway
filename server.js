@@ -310,6 +310,8 @@ app.post('/api/goals/:id/complete', async (req, res) => {
   }
 });
 
+
+
 // Add new transaction
 function validateTransactionInput(body) {
   // GoalRelease is internal-only — created server-side by goal completion,
