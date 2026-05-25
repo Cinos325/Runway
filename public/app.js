@@ -18,6 +18,84 @@ function closeOnBackdropClick(overlayEl, closeFn) {
 let currentType = 'Spending';
 let currentBaseline = 0;  // tracked so the edit modal can pre-fill it
 
+// ============================================
+// Month stepper state — controls which month the two "Top X" cards on Home
+// display. Defaults to the current month and can be walked back with the
+// stepper arrows. Other parts of Home (header, runway, Recent, Goals) are
+// always live and not affected by this state.
+// ============================================
+
+// First-of-month Date for the month currently displayed in the Top X cards.
+// Initialized to the current month at script-load time. Functions below
+// re-derive "current month" from `new Date()` on every check so a month
+// rollover during a long session is handled correctly.
+let displayedMonth = firstOfMonth(new Date());
+
+// Returns a new Date pinned to the first of the given date's month, at
+// midnight local time. We work in local time throughout so the displayed
+// month matches the user's wall clock.
+function firstOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+// YYYY-MM-DD for the displayed month, suitable for the ?month= query param.
+function displayedMonthParam() {
+    const y = displayedMonth.getFullYear();
+    const m = String(displayedMonth.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+}
+
+// True iff displayedMonth equals the live current month. Used to decide
+// whether to send ?month= (don't bother when on current month) and whether
+// the heading text gets the "Top" prefix.
+function isDisplayedMonthCurrent() {
+    const now = firstOfMonth(new Date());
+    return displayedMonth.getTime() === now.getTime();
+}
+
+// Move the displayed month by delta (typically -1 or +1). Forward past the
+// current month is clamped — the cards have no future data to show.
+function stepDisplayedMonth(delta) {
+    const next = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + delta, 1);
+    const currentMonth = firstOfMonth(new Date());
+    // Clamp to current month — never advance past it
+    if (next.getTime() > currentMonth.getTime()) return;
+    displayedMonth = next;
+    updateMonthlyHeadings();
+    updateMonthStepperUI();
+    loadTopCategories();
+    loadTopAccounts();
+}
+
+// Refreshes the stepper widget itself: the label text and the disabled state
+// of the right arrow (left arrow is never disabled — let users discover the
+// data boundary by clicking back into an empty month rather than maintaining
+// a "min month" query at startup).
+function updateMonthStepperUI() {
+    const label = document.getElementById('monthStepperLabel');
+    const nextBtn = document.getElementById('monthStepperNext');
+    if (label) {
+        label.textContent = displayedMonth.toLocaleString(undefined, { month: 'long' });
+    }
+    if (nextBtn) {
+        nextBtn.disabled = isDisplayedMonthCurrent();
+    }
+}
+
+// Updates the two card headings to reflect the displayed month. When on the
+// current month, prefixed with "Top" (per the original design); when looking
+// at a past month, the "Top" prefix is dropped so the wording makes it clear
+// these aren't live rankings — "March categories" reads as a historical
+// retrospective rather than an active leaderboard.
+function updateMonthlyHeadings() {
+    const monthName = displayedMonth.toLocaleString(undefined, { month: 'long' });
+    const prefix = isDisplayedMonthCurrent() ? 'Top ' : '';
+    const cats = document.getElementById('topCategoriesHeading');
+    const accts = document.getElementById('topAccountsHeading');
+    if (cats) cats.textContent = `${prefix}${monthName} categories`;
+    if (accts) accts.textContent = `${prefix}${monthName} balances`;
+}
+
 async function loadSpendingPower() {
     // Keep the month label in sync. Cheap, and means if the user has the app
     // open across midnight on the last day of the month, it'll update on the
@@ -26,6 +104,7 @@ async function loadSpendingPower() {
     if (phMonth) {
         phMonth.textContent = new Date().toLocaleString(undefined, { month: 'long' });
     }
+    
     try {
         const response = await fetch(`${API_URL}/spending-power`);
         const data = await response.json();
@@ -1912,17 +1991,22 @@ planRefreshOnSwitch.observe(document.getElementById('planTab'), {
 
 updateThemeSegments();
 
-// Render top spending categories on Home.
+// Render top spending categories on Home for the displayed month.
 // Fetches /api/spending-by-category, displays each with a proportion bar
-// where the largest category fills 100%. Hidden when there's no data yet.
+// where the largest category fills 100%. When viewing a past month, appends
+// ?month= so the server returns that month's data.
 async function loadTopCategories() {
     const target = document.getElementById('topCategoriesList');
     if (!target) return;
     try {
-        const resp = await fetch(`${API_URL}/spending-by-category?limit=5`);
+        const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-category?limit=5${monthParam}`);
         const rows = await resp.json();
         if (!Array.isArray(rows) || rows.length === 0) {
-            target.innerHTML = '<div class="top-categories-empty">No spending recorded this month yet.</div>';
+            const msg = isDisplayedMonthCurrent()
+                ? 'No spending recorded this month yet.'
+                : 'No spending recorded for this month.';
+            target.innerHTML = `<div class="top-categories-empty">${msg}</div>`;
             return;
         }
         // Find the largest total to use as the bar's max-fill reference
@@ -1946,21 +2030,24 @@ async function loadTopCategories() {
     }
 }
 
-// Render top accounts on Home — "how much have I accumulated on each card."
-// Same shape and visual treatment as loadTopCategories (sorted list, proportion
-// bars normalized to the largest entry). Endpoint includes Spending + Bills
-// only — Savings are excluded because they're typically recorded against an
-// 'N/A' account, which would otherwise dominate the chart. The empty-state
-// copy nudges toward populating the account field on transactions, since
-// this card is only as useful as the data behind it.
+// Render top accounts on Home for the displayed month — "how much have I
+// accumulated on each card." Same shape and visual treatment as
+// loadTopCategories (sorted list, proportion bars normalized to the largest
+// entry). Endpoint includes Spending + Bills + Savings and excludes the 'N/A'
+// account (which is the convention for transactions that didn't touch a
+// tracked card / account). When viewing a past month, appends ?month=.
 async function loadTopAccounts() {
     const target = document.getElementById('topAccountsList');
     if (!target) return;
     try {
-        const resp = await fetch(`${API_URL}/spending-by-account?limit=5`);
+        const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-account?limit=5${monthParam}`);
         const rows = await resp.json();
         if (!Array.isArray(rows) || rows.length === 0) {
-            target.innerHTML = '<div class="top-categories-empty">No account activity recorded this month yet.</div>';
+            const msg = isDisplayedMonthCurrent()
+                ? 'No account activity recorded this month yet.'
+                : 'No account activity recorded for this month.';
+            target.innerHTML = `<div class="top-categories-empty">${msg}</div>`;
             return;
         }
         const maxTotal = rows.reduce((m, r) => Math.max(m, parseFloat(r.total)), 0);
@@ -1983,6 +2070,11 @@ async function loadTopAccounts() {
     }
 }
 
+// Month-stepper arrow handlers — call stepDisplayedMonth which handles the
+// month change, heading refresh, and re-fetching both Top X cards.
+document.getElementById('monthStepperPrev').addEventListener('click', () => stepDisplayedMonth(-1));
+document.getElementById('monthStepperNext').addEventListener('click', () => stepDisplayedMonth(1));
+
 loadSpendingPower();
 loadRecentTransactions();
 loadCategories();
@@ -1992,11 +2084,29 @@ loadGoals();
 loadTopCategories();
 loadTopAccounts();
 initLastUsedAccount();
+updateMonthlyHeadings();
+updateMonthStepperUI();
 
 setInterval(() => {
+    // These four are always live, regardless of which month the stepper shows.
     loadSpendingPower();
     loadRecentTransactions();
     loadGoals();
-    loadTopCategories();
-    loadTopAccounts();
+    // The two Top X cards refresh on the live cadence ONLY when viewing the
+    // current month. Auto-refreshing while the user is reading historical
+    // data would either yank the view back to current (annoying) or just be
+    // pointless churn since past months don't change. Same logic for the
+    // heading refresh — wording only needs updating when on the current
+    // month, since that's the only case where a midnight month rollover
+    // changes what the heading should say.
+    if (isDisplayedMonthCurrent()) {
+        loadTopCategories();
+        loadTopAccounts();
+        updateMonthlyHeadings();
+    }
+    // Always refresh the stepper UI: at a midnight month rollover, what was
+    // "current" (and thus had Next disabled) becomes a past month, and the
+    // Next button needs to re-enable so the user can advance to the new
+    // current month. Cheap DOM-only operation; safe to call unconditionally.
+    updateMonthStepperUI();
 }, 30000);

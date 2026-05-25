@@ -138,10 +138,27 @@
                 </div>
             </div>
             
-            <!-- Top spending categories this month -->
+            <!-- Month stepper: controls which month the two Top X cards
+                 below it display. Defaults to current month, right arrow
+                 disabled there. Walking back queries the same endpoints with
+                 a ?month=YYYY-MM-DD param. Going forward past the current
+                 month doesn't make sense (no data) so the right arrow is
+                 disabled when on the current month. The header / runway /
+                 Recent / Goals are unaffected — they remain live state.
+                 Polling pauses the two Top X refreshes when off-month so
+                 the user's view doesn't get yanked back. -->
+            <div class="month-stepper" id="monthStepper" role="group" aria-label="Change month for top cards">
+                <button type="button" class="month-stepper-arrow" id="monthStepperPrev" aria-label="Previous month">‹</button>
+                <div class="month-stepper-label" id="monthStepperLabel" aria-live="polite">—</div>
+                <button type="button" class="month-stepper-arrow" id="monthStepperNext" aria-label="Next month" disabled>›</button>
+            </div>
+            
+            <!-- Top spending categories this month. The heading text is
+                 dynamically updated by JS to include the current month name
+                 (e.g. "Top May categories"). -->
             <div class="top-categories-card" id="topCategoriesCard">
                 <div class="card-header-row">
-                    <h2 class="card-heading">Top categories this month</h2>
+                    <h2 class="card-heading" id="topCategoriesHeading">Top categories this month</h2>
                 </div>
                 <div id="topCategoriesList">
                     <div class="top-categories-empty">Loading…</div>
@@ -151,11 +168,13 @@
             <!-- Top accounts (cards / banks) by accumulated spend this month.
                  Reuses the .top-categories-card / .top-cat-* styles since the
                  visual treatment is identical (sorted list + proportion bar).
-                 Includes Spending + Bills + Savings — anything that flows OUT
-                 against an account. Hidden when there's nothing to show. -->
+                 Backed by /api/spending-by-account, which includes Spending +
+                 Bills + Savings and excludes the N/A account so this surfaces
+                 actual card balances. Heading text gets the current month
+                 name applied by JS. -->
             <div class="top-categories-card" id="topAccountsCard">
                 <div class="card-header-row">
-                    <h2 class="card-heading">Top accounts this month</h2>
+                    <h2 class="card-heading" id="topAccountsHeading">Top balances this month</h2>
                 </div>
                 <div id="topAccountsList">
                     <div class="top-categories-empty">Loading…</div>

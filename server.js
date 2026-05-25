@@ -470,27 +470,50 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-// Top N spending categories for the current month.
+// Validates and normalizes the optional ?month query param shared by the
+// /api/spending-by-category and /api/spending-by-account endpoints. Accepts
+// any string parseable as YYYY-MM-DD (the DB call normalizes it to the first
+// of the month via date_trunc). Returns either a valid YYYY-MM-DD string or
+// null, in which case the caller treats it as "current month."
+//
+// Reject anything that doesn't match the regex outright so a malformed param
+// doesn't reach the DB and trigger a 500 — instead the caller will fall back
+// to current-month behavior, which is the same as if the param were absent.
+function parseMonthParam(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  // Sanity-check that it's actually a real date (rejects 2026-13-01 etc.)
+  const d = new Date(s + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return null;
+  return s;
+}
+
+// Top N spending categories for a given month (defaults to current month).
 // Returns: [{ category, total }, ...] sorted by total descending.
 // Filters to type='Spending' (discretionary) by design — Bills are excluded
 // because they're fixed obligations and would dominate the chart every month.
+// The optional ?month=YYYY-MM-DD param selects a historical month; the DB
+// truncates to first-of-month so any day within the month works the same.
 app.get('/api/spending-by-category', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit, 10);
     if (isNaN(limit) || limit < 1) limit = 5;
     if (limit > 20) limit = 20;
     
+    const month = parseMonthParam(req.query.month);
+    
     const result = await pool.query(`
       SELECT category, SUM(amount)::numeric AS total
       FROM transactions
       WHERE type = 'Spending'
-        AND month = date_trunc('month', CURRENT_DATE)::date
+        AND month = date_trunc('month', COALESCE($2::date, CURRENT_DATE))::date
         AND category IS NOT NULL
         AND category != ''
       GROUP BY category
       ORDER BY total DESC
       LIMIT $1
-    `, [limit]);
+    `, [limit, month]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -498,19 +521,24 @@ app.get('/api/spending-by-category', async (req, res) => {
   }
 });
 
-// Top N accounts by accumulated spend for the current month.
+// Top N accounts by accumulated spend for a given month (defaults to current).
 // Returns: [{ account, total }, ...] sorted by total descending.
 //
 // Different filter rationale than /api/spending-by-category:
 // the goal here is "what hit each card / account this month" — so we include
-// Spending + Bills (anything that flows OUT against a real account).
-// Excluded:
-//   - Income, Transfer: don't represent outflow against an account
-//   - GoalRelease: system-only, shouldn't appear in user-facing totals
-//   - Savings: in practice these are recorded with account 'N/A' (the user
-//     sets money aside rather than charging it to a card), so including them
-//     creates a fake 'N/A' bucket that dominates the chart. Excluding Savings
-//     keeps the card focused on credit-card / bank-account activity.
+// Spending + Bills + Savings (anything that flows OUT against an account).
+// Income and Transfer are excluded (no outflow), and GoalRelease is system-
+// only and shouldn't appear in user-facing totals.
+//
+// The 'N/A' account is excluded because by convention it marks transactions
+// that didn't touch a credit card / tracked account (e.g. paying a person
+// directly from checking, setting money aside as savings). The card on the
+// Home tab is meant to surface card activity, so N/A would muddy that view.
+// Match is case-insensitive and trims whitespace to catch typo variants
+// ('n/a', ' N/A ', etc.).
+//
+// Optional ?month=YYYY-MM-DD param selects a historical month, same convention
+// as /api/spending-by-category.
 //
 // Despite the path containing "spending", "spend" here means "outflow against
 // the account" — the broader sense than the Spending transaction type.
@@ -520,17 +548,20 @@ app.get('/api/spending-by-account', async (req, res) => {
     if (isNaN(limit) || limit < 1) limit = 5;
     if (limit > 20) limit = 20;
     
+    const month = parseMonthParam(req.query.month);
+    
     const result = await pool.query(`
       SELECT account, SUM(amount)::numeric AS total
       FROM transactions
-      WHERE type IN ('Spending', 'Bills')
-        AND month = date_trunc('month', CURRENT_DATE)::date
+      WHERE type IN ('Spending', 'Bills', 'Savings')
+        AND month = date_trunc('month', COALESCE($2::date, CURRENT_DATE))::date
         AND account IS NOT NULL
         AND account != ''
+        AND LOWER(TRIM(account)) != 'n/a'
       GROUP BY account
       ORDER BY total DESC
       LIMIT $1
-    `, [limit]);
+    `, [limit, month]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);

@@ -1863,6 +1863,63 @@ input[type="date"] {
    Stage 6: Top categories card on Home
    ============================================ */
 
+/* Month stepper: tiny inline pager above the two Top X cards on Home.
+   Intentionally minimal — just two arrow buttons flanking a month label.
+   No card chrome (background, shadow) so it reads as a navigation control
+   rather than a content card. Margin-top matches the cards below it. */
+.month-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    /* No card chrome — sits visually as a separator/control. */
+}
+
+.month-stepper-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    /* Reserve enough width that swapping month names doesn't shift the arrows.
+       "September" is the longest at 9 chars; a min-width of ~96px holds them
+       steady across the year. */
+    min-width: 96px;
+    text-align: center;
+}
+
+.month-stepper-arrow {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 22px;
+    line-height: 1;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.month-stepper-arrow:hover:not(:disabled),
+.month-stepper-arrow:active:not(:disabled) {
+    background: var(--bg-button-secondary);
+}
+
+.month-stepper-arrow:disabled {
+    color: var(--text-secondary);
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* When the Top categories card sits directly under the stepper, tighten the
+   gap so the stepper reads as a control attached to the cards rather than a
+   detached element with full card-spacing on both sides. */
+.month-stepper + .top-categories-card {
+    margin-top: 8px;
+}
+
 .top-categories-card {
     background: var(--bg-card);
     padding: 20px;
