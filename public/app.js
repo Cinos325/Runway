@@ -278,7 +278,11 @@ async function loadGoals() {
     renderInstallments(installments);
     renderSavingsGoals(savingsGoals);
     
-    document.getElementById('goalsCard').classList.remove('empty');
+    // Hide the whole card if both sections came back empty. Each render function
+    // toggles its own .empty class; this just rolls those up to the card.
+    const hasInstallments = Array.isArray(installments) && installments.length > 0;
+    const hasGoals = Array.isArray(savingsGoals) && savingsGoals.length > 0;
+    document.getElementById('goalsCard').classList.toggle('empty', !hasInstallments && !hasGoals);
 }
 
 async function fetchJSON(url) {
@@ -290,11 +294,15 @@ async function fetchJSON(url) {
 function renderInstallments(items) {
     const section = document.getElementById('installmentsSection');
     const list = document.getElementById('installmentsList');
-    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        list.innerHTML = '<div class="goal-empty-state">No installment plans detected. Add a Spending-type recurring transaction with a number of payments to track one here.</div>';
+        // Hide the whole section — no header, no placeholder. The empty state
+        // explanation lived here before; it's been removed in favor of just
+        // disappearing the section so an empty Home stays compact.
+        section.classList.add('empty');
+        list.innerHTML = '';
         return;
     }
+    section.classList.remove('empty');
     list.innerHTML = items.map(renderInstallment).join('');
 }
 
@@ -342,11 +350,14 @@ function renderInstallment(it) {
 function renderSavingsGoals(items) {
     const section = document.getElementById('savingsGoalsSection');
     const list = document.getElementById('savingsGoalsList');
-    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        list.innerHTML = '<div class="goal-empty-state">No savings goals yet. Click + New goal above to create one.</div>';
+        // Hide the whole section. Creating new open goals lives on the Plan tab,
+        // so there's no in-card affordance to point at from an empty state.
+        section.classList.add('empty');
+        list.innerHTML = '';
         return;
     }
+    section.classList.remove('empty');
     list.innerHTML = items.map(renderSavingsGoal).join('');
 }
 
@@ -413,7 +424,9 @@ function openGoalModalForEdit(goal) {
     goalModal.classList.add('active');
 }
 
-document.getElementById('addGoalBtn').addEventListener('click', openGoalModalForAdd);
+// (The "+ New open goal" button on the Home goals card was removed — open-goal
+// creation lives on the Plan tab now. openGoalModalForAdd is still used from
+// the Plan-tab picker, so it stays defined above.)
 document.getElementById('goalCancelBtn').addEventListener('click', () => goalModal.classList.remove('active'));
 closeOnBackdropClick(goalModal, () => goalModal.classList.remove('active'));
 

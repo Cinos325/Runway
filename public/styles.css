@@ -1045,12 +1045,27 @@ textarea {
     padding: 24px;
     border-radius: 12px;
     margin-top: 20px;
+    /* Recent (the card directly below on Home) has no top margin of its own,
+       so the gap between Goals and Recent comes from here. Putting the spacing
+       on Goals rather than on Recent means it correctly disappears when Goals
+       is hidden — Recent then has no leading gap. */
+    margin-bottom: 20px;
     box-shadow: var(--shadow-card);
 }
 
 /* Hide whole card when both subsections are empty (toggled by JS) */
 .goals-card.empty {
     display: none;
+}
+
+/* The goals card now sits at the top of Home, but it carries a margin-top
+   intended for when it followed another card. Strip the top margin from
+   whichever card is first inside any tab-pane so the layout looks the same
+   whether Goals is visible or hidden (display:none preserves :first-child
+   matching, so when Goals is hidden, Recent — the next child — falls back
+   on its own natural zero top margin). */
+.tab-pane > :first-child {
+    margin-top: 0;
 }
 
 .goals-card-header {

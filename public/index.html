@@ -104,6 +104,30 @@
              Recent transactions (3-5) for quick context, then goals for periodic awareness.
              The form moved to Add; tools footer moved to a hidden holder (stage 5 places it on More). -->
         <div class="tab-pane active" id="homeTab" data-tab="home">
+            <!-- Goals card: installments (auto-detected from recurring Spending with
+                 end_date) and open goals (manually created for open-ended saving).
+                 Creating new open goals lives on the Plan tab — this card is read-only.
+                 Each section hides itself when empty; the whole card hides when both
+                 are empty, so an empty Home tab won't show a Goals heading at all.
+                 Sits at the top of Home: progress on active goals is the thing the user
+                 most wants to see first. Empty → Recent becomes the visual top card,
+                 and the :first-child margin rule below keeps the spacing tidy. -->
+            <div class="goals-card" id="goalsCard">
+                <div class="goals-card-header">
+                    <h2 class="goals-heading">Goals</h2>
+                </div>
+                
+                <div class="goals-section" id="installmentsSection">
+                    <div class="goals-section-title">Installments</div>
+                    <div id="installmentsList"></div>
+                </div>
+                
+                <div class="goals-section" id="savingsGoalsSection">
+                    <div class="goals-section-title">Open goals</div>
+                    <div id="savingsGoalsList"></div>
+                </div>
+            </div>
+            
             <div class="recent-transactions">
                 <div class="card-header-row">
                     <h2 class="card-heading">Recent</h2>
@@ -121,25 +145,6 @@
                 </div>
                 <div id="topCategoriesList">
                     <div class="top-categories-empty">Loading…</div>
-                </div>
-            </div>
-            
-            <!-- Goals card: installments (auto-detected from recurring Spending with
-                 end_date) and open goals (manually created for open-ended saving). -->
-            <div class="goals-card" id="goalsCard">
-                <div class="goals-card-header">
-                    <h2 class="goals-heading">Goals</h2>
-                    <button type="button" class="add-button" id="addGoalBtn">+ New open goal</button>
-                </div>
-                
-                <div class="goals-section" id="installmentsSection">
-                    <div class="goals-section-title">Installments</div>
-                    <div id="installmentsList"></div>
-                </div>
-                
-                <div class="goals-section" id="savingsGoalsSection">
-                    <div class="goals-section-title">Open goals</div>
-                    <div id="savingsGoalsList"></div>
                 </div>
             </div>
         </div><!-- end #homeTab -->
