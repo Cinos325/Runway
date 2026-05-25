@@ -93,6 +93,16 @@ CROSS JOIN (SELECT SUM(amount) AS total FROM transactions
 
 This means there's no caching to invalidate, no triggers to debug, and no possibility of the displayed number drifting from the underlying data. Adding a new transaction immediately changes spending power. Editing one corrects it. Deleting one undoes it. The number is always derived, never stored.
 
+### Linking ad-hoc to planned, transparently
+
+Recurring transactions are *projected* into spending power before they happen — when you create a $200/mo recurring bill, spending power drops by $200 immediately, not when the actual transaction lands. That works cleanly for committed obligations.
+
+But manually-logged transactions break the model. If I log a $300 ad-hoc savings transfer mid-month, the money leaves my checking account, but the planned-obligations subquery doesn't know about it, so spending power overstates what I have left. Earlier versions papered over this by having me manually lower the baseline.
+
+The fix was a nullable `recurring_id` foreign key on `transactions`, pointing back at the source template for auto-generated rows. The `spending_power` view gained a small additional subquery: subtract any Bills or Savings transaction this month where `recurring_id IS NULL` — ad-hoc obligations that weren't projected via the planned subquery. Recurring-linked transactions stay excluded, since they're already in `planned`.
+
+The total fix is two columns of new SQL and one new join in the view, but it eliminated a whole class of "why is my spending power wrong" friction.
+
 ### A pace ring that makes the abstract concrete
 
 The spending power number alone tells you "how much" but not "are you on track?" A small circular indicator in the header solves this: a ring filled with your remaining-fraction-of-available, with a tick mark showing where a linear-pace burn-down would put you on this day of the month. Color shifts from green (ahead) through blue (on pace) to amber and red as overspending accelerates.
@@ -154,10 +164,10 @@ finance-app/
 ├── docker-compose.yml              # full stack: postgres + metabase + pgadmin + api
 ├── .dockerignore
 ├── .env.example                    # template for secrets / config
-├── index.html                      # frontend shell, ~300 lines
 ├── public/
-│   ├── styles.css                  # ~800 lines
-│   ├── app.js                      # ~900 lines, organized by feature section
+│   ├── index.html                  # frontend shell, ~530 lines
+│   ├── styles.css                  # ~2000 lines
+│   ├── app.js                      # ~1900 lines, organized by feature section
 │   ├── manifest.json               # PWA manifest
 │   └── icons/                      # 192/512/180 PNGs
 ├── migrations/
@@ -212,7 +222,7 @@ These are intentional choices, not oversights — but they're real, and worth be
 
 **No backup automation.** The Postgres volume is the single point of failure. A `pg_dump` cron job writing to a separate mount is the obvious next addition. Not yet implemented.
 
-**The frontend is one big JS file.** Around 900 lines, organized by section comments. ES modules would be the next step, but I left it as a single script because adding modules without a build step still has subtle pitfalls (CORS for `file://`, mime-type requirements) and the file is still navigable with editor folding.
+**The frontend is one big JS file.** Around 1900 lines, organized by section comments. ES modules would be the next step, but I left it as a single script because adding modules without a build step still has subtle pitfalls (CORS for `file://`, mime-type requirements) and the file is still navigable with editor folding.
 
 **The pace ring assumes linear monthly spending**, which nobody actually does. Most people front-load early-month groceries, have a quiet middle, and a flurry at month-end. The thresholds for "ahead/behind" are tuned generously so day-1 grocery runs don't fire false alarms, but the underlying model is admittedly simplistic.
 
