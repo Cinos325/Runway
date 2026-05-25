@@ -1027,6 +1027,25 @@ textarea {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    /* Default top-alignment: inputs sit on the same baseline as long as the
+       labels on both sides have the same height. All current label pairs are
+       short (one or two words) and don't wrap at typical phone widths, so
+       this works without an explicit align-items override. Avoid align-items:
+       end here — it breaks rows where one side has trailing content below
+       the input (e.g. the installment .field-hint), because it would align
+       the other side's input with the hint instead of the input. */
+}
+
+/* When applyPlanTypeToForm() hides one .form-group via inline style (e.g.
+   subscriptions/recurring hide "Number of payments"; subscriptions hide
+   "Type"), the lone visible sibling should fill the whole row instead of
+   sitting at half-width with empty space beside it. The :has() selector
+   detects an inline display:none on a sibling .form-group and spans the
+   visible field across both grid columns. Both directions are covered so
+   it works whether the hidden field is the left or the right child. */
+.form-row-inline > .form-group:not([style*="display: none"]):has(~ .form-group[style*="display: none"]),
+.form-row-inline > .form-group[style*="display: none"] ~ .form-group:not([style*="display: none"]) {
+    grid-column: 1 / -1;
 }
 
 .empty-state {

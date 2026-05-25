@@ -523,6 +523,7 @@ document.getElementById('goalMarkCompleteBtn').addEventListener('click', async (
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         // If a release was created, show a confirmatory message
         if (result.released) {
             const successMsg = document.getElementById('successMsg');
@@ -571,6 +572,39 @@ let editingOriginalDate = null;  // preserved so we can show "Editing transactio
 const formCard = document.getElementById('formCard');
 const editBannerText = document.getElementById('editBannerText');
 const transactionDateInput = document.getElementById('transactionDate');
+
+// Tracks the account on the most recent transaction so the Add form can
+// auto-prefill it (people tend to use the same card several entries in a row).
+// Initialized once on page load from /api/transactions/recent, then updated
+// after every successful save so subsequent entries inherit the just-used
+// account. We deliberately don't update from the periodic refresh — that
+// could clobber whatever the user is in the middle of typing.
+let lastUsedAccount = '';
+
+// Restores the account field to lastUsedAccount. Called after form.reset()
+// (post-submit and on cancel-edit) so the field doesn't go blank between
+// entries. Safe to call when lastUsedAccount is '' — just leaves the field
+// empty, same as a fresh install with no history.
+function restoreLastUsedAccount() {
+    const accountInput = document.getElementById('account');
+    if (accountInput) accountInput.value = lastUsedAccount;
+}
+
+// One-shot initializer: fetch the most recent transaction and seed both
+// lastUsedAccount and the Add form's account field. Runs on page load.
+async function initLastUsedAccount() {
+    try {
+        const resp = await fetch(`${API_URL}/transactions/recent`);
+        const txns = await resp.json();
+        if (Array.isArray(txns) && txns.length > 0 && txns[0].account) {
+            lastUsedAccount = txns[0].account;
+            restoreLastUsedAccount();
+        }
+    } catch (err) {
+        // Non-fatal — if it fails, the field just starts empty
+        console.error('Failed to initialize last-used account:', err);
+    }
+}
 
 function todayString() {
     return new Date().toISOString().slice(0, 10);
@@ -631,6 +665,8 @@ function exitEditMode() {
     setTypeButton('Spending');
     // form.reset() clears the date input too, so restore today
     transactionDateInput.value = todayString();
+    // form.reset() also blanks the account; refill it with the last-used one
+    restoreLastUsedAccount();
     updateSubmitButtonLabel();
 }
 
@@ -678,9 +714,17 @@ document.getElementById('transactionForm').addEventListener('submit', async func
         successMsg.classList.add('show');
         setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
         
+        // Remember the account just used so the next entry inherits it.
+        // Tracked in both edit and add paths — if you edit a transaction
+        // and change its account, that's also a signal of "current account."
+        if (transaction.account) {
+            lastUsedAccount = transaction.account;
+        }
+        
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         await loadGoals();
         
         if (isEditing) {
@@ -689,6 +733,10 @@ document.getElementById('transactionForm').addEventListener('submit', async func
             this.reset();
             setTypeButton('Spending');
             transactionDateInput.value = todayString();
+            // Re-apply the auto-prefilled account so the next entry doesn't
+            // start blank — most people enter a few transactions on the same
+            // card in a row.
+            restoreLastUsedAccount();
         }
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -852,6 +900,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         await loadGoals();
     } catch (err) {
         alert('Failed to delete. Please try again.');
@@ -1337,6 +1386,7 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         await loadGoals();
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -1896,6 +1946,43 @@ async function loadTopCategories() {
     }
 }
 
+// Render top accounts on Home — "how much have I accumulated on each card."
+// Same shape and visual treatment as loadTopCategories (sorted list, proportion
+// bars normalized to the largest entry). Endpoint includes Spending + Bills
+// only — Savings are excluded because they're typically recorded against an
+// 'N/A' account, which would otherwise dominate the chart. The empty-state
+// copy nudges toward populating the account field on transactions, since
+// this card is only as useful as the data behind it.
+async function loadTopAccounts() {
+    const target = document.getElementById('topAccountsList');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/spending-by-account?limit=5`);
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+            target.innerHTML = '<div class="top-categories-empty">No account activity recorded this month yet.</div>';
+            return;
+        }
+        const maxTotal = rows.reduce((m, r) => Math.max(m, parseFloat(r.total)), 0);
+        target.innerHTML = rows.map(r => {
+            const total = parseFloat(r.total);
+            const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+            return `
+                <div class="top-cat-item">
+                    <div class="top-cat-row">
+                        <div class="top-cat-name">${escapeHtml(r.account)}</div>
+                        <div class="top-cat-amount">$${total.toFixed(2)}</div>
+                    </div>
+                    <div class="top-cat-bar"><div class="top-cat-bar-fill" style="width: ${pct.toFixed(1)}%"></div></div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load top accounts:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
 loadSpendingPower();
 loadRecentTransactions();
 loadCategories();
@@ -1903,10 +1990,13 @@ loadAccounts();
 loadTools();
 loadGoals();
 loadTopCategories();
+loadTopAccounts();
+initLastUsedAccount();
 
 setInterval(() => {
     loadSpendingPower();
     loadRecentTransactions();
     loadGoals();
     loadTopCategories();
+    loadTopAccounts();
 }, 30000);

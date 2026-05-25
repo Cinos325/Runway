@@ -147,6 +147,20 @@
                     <div class="top-categories-empty">Loading…</div>
                 </div>
             </div>
+            
+            <!-- Top accounts (cards / banks) by accumulated spend this month.
+                 Reuses the .top-categories-card / .top-cat-* styles since the
+                 visual treatment is identical (sorted list + proportion bar).
+                 Includes Spending + Bills + Savings — anything that flows OUT
+                 against an account. Hidden when there's nothing to show. -->
+            <div class="top-categories-card" id="topAccountsCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Top accounts this month</h2>
+                </div>
+                <div id="topAccountsList">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
         </div><!-- end #homeTab -->
         
         <!-- ====== ADD TAB ====== -->
@@ -386,10 +400,11 @@
                 <button type="button" class="modal-btn-save" id="goalSaveBtn">Save</button>
             </div>
             
-            <div class="modal-buttons" id="goalEditButtons" style="display: none; grid-template-columns: 1fr 1fr 1fr; margin-top: 8px;">
+            <!-- Edit-mode-only row. Uses the same 2-col grid as the row above so
+                 Delete and Mark complete are the same width as Cancel and Save. -->
+            <div class="modal-buttons" id="goalEditButtons" style="display: none; margin-top: 8px;">
                 <button type="button" class="modal-btn-cancel danger" id="goalDeleteBtn">Delete</button>
                 <button type="button" class="modal-btn-cancel" id="goalMarkCompleteBtn">Mark complete</button>
-                <div></div>
             </div>
         </div>
     </div>
@@ -486,7 +501,7 @@
                             <input type="date" id="recStartDate">
                         </div>
                         <div class="form-group">
-                            <label>Number of payments (optional)</label>
+                            <label>Number of payments</label>
                             <input type="number" id="recNumPayments" min="2" placeholder="e.g. 6">
                         </div>
                     </div>

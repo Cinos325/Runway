@@ -498,6 +498,46 @@ app.get('/api/spending-by-category', async (req, res) => {
   }
 });
 
+// Top N accounts by accumulated spend for the current month.
+// Returns: [{ account, total }, ...] sorted by total descending.
+//
+// Different filter rationale than /api/spending-by-category:
+// the goal here is "what hit each card / account this month" — so we include
+// Spending + Bills (anything that flows OUT against a real account).
+// Excluded:
+//   - Income, Transfer: don't represent outflow against an account
+//   - GoalRelease: system-only, shouldn't appear in user-facing totals
+//   - Savings: in practice these are recorded with account 'N/A' (the user
+//     sets money aside rather than charging it to a card), so including them
+//     creates a fake 'N/A' bucket that dominates the chart. Excluding Savings
+//     keeps the card focused on credit-card / bank-account activity.
+//
+// Despite the path containing "spending", "spend" here means "outflow against
+// the account" — the broader sense than the Spending transaction type.
+app.get('/api/spending-by-account', async (req, res) => {
+  try {
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 5;
+    if (limit > 20) limit = 20;
+    
+    const result = await pool.query(`
+      SELECT account, SUM(amount)::numeric AS total
+      FROM transactions
+      WHERE type IN ('Spending', 'Bills')
+        AND month = date_trunc('month', CURRENT_DATE)::date
+        AND account IS NOT NULL
+        AND account != ''
+      GROUP BY account
+      ORDER BY total DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // Get distinct accounts
 app.get('/api/accounts', async (req, res) => {
   try {
