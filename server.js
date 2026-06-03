@@ -114,6 +114,30 @@ app.get('/api/transactions/recent', async (req, res) => {
   }
 });
 
+// Get a single transaction by id (used to pre-fill the edit form).
+// The /recent endpoint is paginated/filtered, so it can't be relied on
+// to contain every transaction the user might tap edit on.
+app.get('/api/transactions/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const result = await pool.query(`
+      SELECT id, transaction_date, type, amount, category, description, payee, account
+      FROM transactions
+      WHERE id = $1
+    `, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // List active installment plans with progress.
 // An installment plan is a Spending-type recurring transaction with an end_date.
 app.get('/api/installments', async (req, res) => {

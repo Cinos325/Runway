@@ -935,12 +935,11 @@ document.getElementById('recentList').addEventListener('click', async (e) => {
     if (trigger.dataset.action === 'confirm-delete') {
         openDeleteConfirm(id);
     } else if (trigger.dataset.action === 'edit') {
-        // Need the full row to pre-fill the form. Refetch the recent list and find this id.
         try {
-            const resp = await fetch(`${API_URL}/transactions/recent`);
-            const items = await resp.json();
-            const t = items.find(x => x.id === id);
-            if (t) enterEditMode(t);
+            const resp = await fetch(`${API_URL}/transactions/${id}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const t = await resp.json();
+            enterEditMode(t);
         } catch (err) {
             console.error('Failed to load transaction for edit:', err);
         }
@@ -1851,10 +1850,10 @@ document.getElementById('moreTransactionsList').addEventListener('click', async 
         openDeleteConfirm(id);
     } else if (trigger.dataset.action === 'edit') {
         try {
-            const resp = await fetch(`${API_URL}/transactions/recent`);
-            const items = await resp.json();
-            const t = items.find(x => x.id === id);
-            if (t) enterEditMode(t);
+            const resp = await fetch(`${API_URL}/transactions/${id}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const t = await resp.json();
+            enterEditMode(t);
         } catch (err) {
             console.error('Failed to load transaction for edit:', err);
         }
