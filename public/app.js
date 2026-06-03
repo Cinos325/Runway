@@ -1553,9 +1553,21 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e)
 // it stays visible regardless of which tab is showing.
 
 function switchTab(tabName) {
+    // Leaving the Add tab while an edit is in progress is treated as an
+    // implicit cancel. Bottom-nav tabs read as context switches, and silently
+    // preserving edit state across tabs makes it too easy to come back later
+    // and overwrite the wrong transaction without realizing edit was still on.
+    // The visible Cancel button still handles the case where the user is on
+    // the Add tab and wants to back out.
+    const currentTab = document.querySelector('.tab-pane.active')?.dataset.tab;
+    if (currentTab === 'add' && tabName !== 'add' && editingTransactionId !== null) {
+        exitEditMode();
+    }
+    
     document.querySelectorAll('.tab-pane').forEach(pane => {
         pane.classList.toggle('active', pane.dataset.tab === tabName);
     });
+    // ... rest unchanged
     document.querySelectorAll('.nav-tab').forEach(btn => {
         const isActive = btn.dataset.target === tabName;
         btn.classList.toggle('active', isActive);
