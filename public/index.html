@@ -90,14 +90,11 @@
         </div>
     </header>
     
-    <!-- Temporary holding place for icon buttons during the redesign.
-         These will be moved into the More tab in stage 5; for now they need to
-         exist in the DOM so the JS that wires their click handlers doesn't throw,
-         but they're hidden because the new persistent header doesn't show them. -->
+    <!-- Hidden holder for buttons referenced programmatically. Only editBaselineBtn
+         remains — moreEditBaselineBtn delegates to it. The tools-footer hosts
+         dynamically-injected diagnostic buttons. -->
     <div id="legacyHeaderActions" hidden>
         <button type="button" class="icon-button" id="editBaselineBtn" title="Edit baseline" aria-label="Edit baseline"></button>
-        <button type="button" class="icon-button" id="manageRecurringBtn" title="Manage recurring" aria-label="Manage recurring"></button>
-        <button type="button" class="icon-button" id="refreshBtn" title="Refresh" aria-label="Refresh"></button>
         <div class="tools-footer" id="toolsFooter"></div>
     </div>
     
@@ -107,6 +104,30 @@
              Recent transactions (3-5) for quick context, then goals for periodic awareness.
              The form moved to Add; tools footer moved to a hidden holder (stage 5 places it on More). -->
         <div class="tab-pane active" id="homeTab" data-tab="home">
+            <!-- Goals card: installments (auto-detected from recurring Spending with
+                 end_date) and open goals (manually created for open-ended saving).
+                 Creating new open goals lives on the Plan tab — this card is read-only.
+                 Each section hides itself when empty; the whole card hides when both
+                 are empty, so an empty Home tab won't show a Goals heading at all.
+                 Sits at the top of Home: progress on active goals is the thing the user
+                 most wants to see first. Empty → Recent becomes the visual top card,
+                 and the :first-child margin rule below keeps the spacing tidy. -->
+            <div class="goals-card" id="goalsCard">
+                <div class="goals-card-header">
+                    <h2 class="goals-heading">Goals</h2>
+                </div>
+                
+                <div class="goals-section" id="installmentsSection">
+                    <div class="goals-section-title">Installments</div>
+                    <div id="installmentsList"></div>
+                </div>
+                
+                <div class="goals-section" id="savingsGoalsSection">
+                    <div class="goals-section-title">Open goals</div>
+                    <div id="savingsGoalsList"></div>
+                </div>
+            </div>
+            
             <div class="recent-transactions">
                 <div class="card-header-row">
                     <h2 class="card-heading">Recent</h2>
@@ -117,37 +138,46 @@
                 </div>
             </div>
             
-            <!-- Top spending categories this month -->
+            <!-- Month stepper: controls which month the two Top X cards
+                 below it display. Defaults to current month, right arrow
+                 disabled there. Walking back queries the same endpoints with
+                 a ?month=YYYY-MM-DD param. Going forward past the current
+                 month doesn't make sense (no data) so the right arrow is
+                 disabled when on the current month. The header / runway /
+                 Recent / Goals are unaffected — they remain live state.
+                 Polling pauses the two Top X refreshes when off-month so
+                 the user's view doesn't get yanked back. -->
+            <div class="month-stepper" id="monthStepper" role="group" aria-label="Change month for top cards">
+                <button type="button" class="month-stepper-arrow" id="monthStepperPrev" aria-label="Previous month">‹</button>
+                <div class="month-stepper-label" id="monthStepperLabel" aria-live="polite">—</div>
+                <button type="button" class="month-stepper-arrow" id="monthStepperNext" aria-label="Next month" disabled>›</button>
+            </div>
+            
+            <!-- Top spending categories this month. The heading text is
+                 dynamically updated by JS to include the current month name
+                 (e.g. "Top May categories"). -->
             <div class="top-categories-card" id="topCategoriesCard">
                 <div class="card-header-row">
-                    <h2 class="card-heading">Top categories this month</h2>
+                    <h2 class="card-heading" id="topCategoriesHeading">Top categories this month</h2>
                 </div>
                 <div id="topCategoriesList">
                     <div class="top-categories-empty">Loading…</div>
                 </div>
             </div>
             
-            <!-- Goals card: installments (auto), saving plans (auto from recurring Savings),
-                 and open goals (manually created for open-ended saving). -->
-            <div class="goals-card" id="goalsCard">
-                <div class="goals-card-header">
-                    <h2 class="goals-heading">Goals</h2>
-                    <button type="button" class="add-button" id="addGoalBtn">+ New open goal</button>
+            <!-- Top accounts (cards / banks) by accumulated spend this month.
+                 Reuses the .top-categories-card / .top-cat-* styles since the
+                 visual treatment is identical (sorted list + proportion bar).
+                 Backed by /api/spending-by-account, which includes Spending +
+                 Bills + Savings and excludes the N/A account so this surfaces
+                 actual card balances. Heading text gets the current month
+                 name applied by JS. -->
+            <div class="top-categories-card" id="topAccountsCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading" id="topAccountsHeading">Top balances this month</h2>
                 </div>
-                
-                <div class="goals-section" id="installmentsSection">
-                    <div class="goals-section-title">Installments</div>
-                    <div id="installmentsList"></div>
-                </div>
-                
-                <div class="goals-section" id="savingsPlansSection">
-                    <div class="goals-section-title">Saving plans</div>
-                    <div id="savingsPlansList"></div>
-                </div>
-                
-                <div class="goals-section" id="savingsGoalsSection">
-                    <div class="goals-section-title">Open goals</div>
-                    <div id="savingsGoalsList"></div>
+                <div id="topAccountsList">
+                    <div class="top-categories-empty">Loading…</div>
                 </div>
             </div>
         </div><!-- end #homeTab -->
@@ -205,91 +235,64 @@
                         <div class="autocomplete-list" id="accountList"></div>
                     </div>
                     
-                    <!-- This repeats: turning this on converts the entry into a recurring template
-                         instead of (or in addition to) a single transaction. Hidden when type=Transfer. -->
-                    <div class="form-repeats-divider" id="repeatsRow">
-                        <button type="button" class="toggle-button" id="repeatsToggle" aria-pressed="false" aria-controls="repeatsFields">
-                            <span class="toggle-icon">✓</span>
-                            <span>This repeats</span>
-                        </button>
-                    </div>
-                    
-                    <div class="repeats-fields" id="repeatsFields" hidden>
-                        <div class="form-group">
-                            <label>Name</label>
-                            <input type="text" id="repName" placeholder="e.g. Netflix monthly">
-                            <div class="field-hint">Auto-filled from payee + frequency; edit if you want a different label.</div>
-                        </div>
-                        
-                        <div class="form-row-inline">
-                            <div class="form-group">
-                                <label>Frequency</label>
-                                <select id="repFrequency">
-                                    <option value="monthly">Monthly</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="biweekly">Biweekly</option>
-                                    <option value="yearly">Yearly</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Day of month (optional)</label>
-                                <input type="number" id="repDayOfMonth" min="1" max="31" placeholder="—">
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Number of payments (optional)</label>
-                            <input type="number" id="repNumPayments" min="1" placeholder="leave blank for indefinite">
-                            <div class="field-hint" id="repEndPreview"></div>
-                        </div>
-                        
-                        <!-- Total amount helper: appears when number of payments is set.
-                             Two-way syncs with the main Amount field above. The form's
-                             data model stays per-payment; this is purely a UX convenience
-                             for entering "$1200 over 6 months" rather than doing the math. -->
-                        <div class="form-group" id="repTotalGroup" hidden>
-                            <label>Total amount (calculator)</label>
-                            <input type="number" id="repTotalAmount" step="0.01" placeholder="e.g. 1200.00">
-                            <div class="field-hint">Two-way synced with Amount above. Edit either and the other updates.</div>
-                        </div>
-                        
-                        <div class="toggle-row" id="addPayTodayRow">
-                            <button type="button" class="toggle-button" id="addPayTodayToggle" aria-pressed="false">
-                                <span class="toggle-icon">✓</span>
-                                <span>Also record today's payment</span>
-                            </button>
-                        </div>
-                    </div>
-                    
                     <button type="submit" class="submit-btn">Add Transaction</button>
                 </form>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="planTab" data-tab="plan">
+            <div class="more-card">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Recurring transactions</h2>
+                </div>
+                <!-- Plan type picker: four ways to create a plan. The first three
+                     open the recurring modal preconfigured; "Open goal" opens the
+                     open-goal modal (separate table). -->
+                <div class="picker-label">Add a plan</div>
+                <div class="plan-type-picker">
+                    <button type="button" class="plan-type-btn" data-plan-type="subscription">
+                        <span class="plan-type-label">+ Subscription</span>
+                        <span class="plan-type-hint">Pay today, no end date</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="recurring">
+                        <span class="plan-type-label">+ Recurring</span>
+                        <span class="plan-type-hint">Bills, savings, or other</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="installment">
+                        <span class="plan-type-label">+ Installment</span>
+                        <span class="plan-type-hint">Bills paid in chunks</span>
+                    </button>
+                    <button type="button" class="plan-type-btn" data-plan-type="open-goal">
+                        <span class="plan-type-label">+ Open goal</span>
+                        <span class="plan-type-hint">Save toward something</span>
+                    </button>
+                </div>
+                <!-- Filter chips: filter the recurring list by type. Pattern mirrors
+                     the history-list filter on the More tab. -->
+                <div class="history-filters">
+                    <div class="history-filter-chips" id="planTypeChips" role="group" aria-label="Filter recurring by type">
+                        <button type="button" class="filter-chip active" data-filter-type="">All</button>
+                        <button type="button" class="filter-chip" data-filter-type="Bills">Bills</button>
+                        <button type="button" class="filter-chip" data-filter-type="Savings">Savings</button>
+                        <button type="button" class="filter-chip" data-filter-type="Spending">Spending</button>
+                    </div>
+                </div>
+                <div id="planRecurringList">
+                    <div class="empty-state">Loading…</div>
+                </div>
             </div>
         </div>
         
         <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
-            <!-- Sub-tab selector: three sections inside More -->
+            <!-- Sub-tab selector: two sections inside More (Recurring moved to Plan tab in stage 2) -->
             <div class="sub-tabs" role="tablist" aria-label="More sections">
-                <button type="button" class="sub-tab active" data-subtab="recurring" role="tab" aria-selected="true">Recurring</button>
-                <button type="button" class="sub-tab" data-subtab="history" role="tab" aria-selected="false">History</button>
+                <button type="button" class="sub-tab active" data-subtab="history" role="tab" aria-selected="true">History</button>
                 <button type="button" class="sub-tab" data-subtab="settings" role="tab" aria-selected="false">Settings</button>
             </div>
             
-            <!-- Recurring sub-tab -->
-            <div class="sub-tab-pane active" id="subRecurring" data-subtab="recurring" role="tabpanel">
-                <div class="more-card">
-                    <div class="card-header-row">
-                        <h2 class="card-heading">Recurring transactions</h2>
-                        <button type="button" class="add-button" id="moreAddRecurringBtn">+ Add</button>
-                    </div>
-                    <div id="moreRecurringList">
-                        <div class="empty-state">Loading…</div>
-                    </div>
-                </div>
-            </div>
-            
             <!-- History sub-tab -->
-            <div class="sub-tab-pane" id="subHistory" data-subtab="history" role="tabpanel" hidden>
+            <div class="sub-tab-pane active" id="subHistory" data-subtab="history" role="tabpanel">
                 <div class="more-card">
                     <h2 class="card-heading" style="margin-bottom: 12px;">All transactions</h2>
                     <!-- Filters: type chips + category dropdown -->
@@ -365,6 +368,15 @@
             </svg>
             <span class="nav-label">Add</span>
         </button>
+        <button type="button" class="nav-tab" data-target="plan">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="5" width="16" height="16" rx="2"/>
+                <line x1="4" y1="10" x2="20" y2="10"/>
+                <line x1="9" y1="3" x2="9" y2="7"/>
+                <line x1="15" y1="3" x2="15" y2="7"/>
+            </svg>
+            <span class="nav-label">Plan</span>
+        </button>
         <button type="button" class="nav-tab" data-target="more">
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <line x1="4" y1="7" x2="20" y2="7"/>
@@ -407,10 +419,11 @@
                 <button type="button" class="modal-btn-save" id="goalSaveBtn">Save</button>
             </div>
             
-            <div class="modal-buttons" id="goalEditButtons" style="display: none; grid-template-columns: 1fr 1fr 1fr; margin-top: 8px;">
+            <!-- Edit-mode-only row. Uses the same 2-col grid as the row above so
+                 Delete and Mark complete are the same width as Cancel and Save. -->
+            <div class="modal-buttons" id="goalEditButtons" style="display: none; margin-top: 8px;">
                 <button type="button" class="modal-btn-cancel danger" id="goalDeleteBtn">Delete</button>
                 <button type="button" class="modal-btn-cancel" id="goalMarkCompleteBtn">Mark complete</button>
-                <div></div>
             </div>
         </div>
     </div>
@@ -446,20 +459,7 @@
     <!-- Manage recurring transactions modal -->
     <div class="modal-overlay" id="recurringModal">
         <div class="modal modal-wide">
-            <div id="recurringListView">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <h2 style="font-size: 18px;">Recurring transactions</h2>
-                    <button type="button" class="add-button" id="recurringAddNewBtn">+ Add new</button>
-                </div>
-                <div class="modal-body" id="recurringList">
-                    <div class="empty-state">Loading…</div>
-                </div>
-                <div class="modal-buttons" style="grid-template-columns: 1fr;">
-                    <button type="button" class="modal-btn-cancel" id="recurringCloseBtn">Close</button>
-                </div>
-            </div>
-            
-            <div id="recurringFormView" style="display: none;">
+            <div id="recurringFormView">
                 <h2 style="font-size: 18px; margin-bottom: 4px;" id="recurringFormTitle">Add recurring transaction</h2>
                 <p class="modal-subtitle">These appear in your spending power calculation as planned payments (except Income, which adds to it).</p>
                 <div class="modal-body">
@@ -468,7 +468,7 @@
                         <input type="text" id="recName" placeholder="Phone bill, Netflix, etc.">
                     </div>
                     <div class="form-row-inline">
-                        <div class="form-group">
+                        <div class="form-group" id="recTypeField">
                             <label>Type</label>
                             <select id="recType">
                                 <option value="Bills">Bills</option>
@@ -477,9 +477,10 @@
                                 <option value="Income">Income</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Amount</label>
+                        <div class="form-group" id="recAmountField">
+                            <label id="recAmountLabel">Amount</label>
                             <input type="number" id="recAmount" step="0.01" placeholder="0.00">
+                            <div class="field-hint" id="recAmountHint" hidden></div>
                         </div>
                     </div>
                     <div class="form-group">
@@ -519,7 +520,7 @@
                             <input type="date" id="recStartDate">
                         </div>
                         <div class="form-group">
-                            <label>Number of payments (optional)</label>
+                            <label>Number of payments</label>
                             <input type="number" id="recNumPayments" min="2" placeholder="e.g. 6">
                         </div>
                     </div>
@@ -544,7 +545,7 @@
                     </div>
                 </div>
                 <div class="modal-buttons">
-                    <button type="button" class="modal-btn-cancel" id="recurringFormCancelBtn">Back</button>
+                    <button type="button" class="modal-btn-cancel" id="recurringFormCancelBtn">Cancel</button>
                     <button type="button" class="modal-btn-save" id="recurringFormSaveBtn">Save</button>
                 </div>
             </div>

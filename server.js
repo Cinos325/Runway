@@ -29,6 +29,7 @@ app.get('/api/spending-power', async (req, res) => {
         current_month_income,
         planned_payments_total,
         current_month_spending,
+        current_month_adhoc_obligations,
         current_month
       FROM spending_power
     `);
@@ -113,6 +114,30 @@ app.get('/api/transactions/recent', async (req, res) => {
   }
 });
 
+// Get a single transaction by id (used to pre-fill the edit form).
+// The /recent endpoint is paginated/filtered, so it can't be relied on
+// to contain every transaction the user might tap edit on.
+app.get('/api/transactions/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const result = await pool.query(`
+      SELECT id, transaction_date, type, amount, category, description, payee, account
+      FROM transactions
+      WHERE id = $1
+    `, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // List active installment plans with progress.
 // An installment plan is a Spending-type recurring transaction with an end_date.
 app.get('/api/installments', async (req, res) => {
@@ -125,25 +150,6 @@ app.get('/api/installments', async (req, res) => {
         amount_paid, payments_made, amount_remaining,
         pct_paid, pct_time_elapsed
       FROM installment_progress
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-// Auto-detected savings plans: recurring Savings transactions with an end_date.
-// These appear in the Goals card alongside open-ended goals from savings_goals table.
-app.get('/api/savings-plans', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        id, name, payee, category, account, frequency,
-        start_date, end_date,
-        payment_amount, total_periods, target_amount,
-        amount_saved, payments_made, amount_remaining, pct_saved
-      FROM savings_plan_progress
     `);
     res.json(result.rows);
   } catch (err) {
@@ -328,63 +334,7 @@ app.post('/api/goals/:id/complete', async (req, res) => {
   }
 });
 
-// Complete an auto-detected savings plan. Mirrors /api/goals/:id/complete but
-// operates on a recurring_transactions row instead of a savings_goals row.
-// The :id here is the recurring_transactions.id, not a savings_goals.id.
-app.post('/api/savings-plans/:id/complete', async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
-  
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    
-    // Look up the plan from the savings_plan_progress view to get current saved amount + category
-    const planQ = await client.query(
-      `SELECT id, name, category, amount_saved
-       FROM savings_plan_progress
-       WHERE id = $1`,
-      [id]
-    );
-    if (planQ.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Savings plan not found (might already be inactive or missing end_date)' });
-    }
-    const plan = planQ.rows[0];
-    const amountSaved = parseFloat(plan.amount_saved || 0);
-    
-    // Create the GoalRelease transaction for the released amount
-    if (amountSaved > 0) {
-      await client.query(
-        `INSERT INTO transactions
-          (transaction_date, type, amount, category, description, payee, account)
-         VALUES (CURRENT_DATE, 'GoalRelease', $1, $2, $3, 'Goal completion', NULL)`,
-        [amountSaved, plan.category, `Released $${amountSaved.toFixed(2)} from plan: ${plan.name}`]
-      );
-    }
-    
-    // Deactivate the recurring template itself (the plan's source)
-    await client.query(
-      `UPDATE recurring_transactions
-       SET is_active = false
-       WHERE id = $1`,
-      [id]
-    );
-    
-    await client.query('COMMIT');
-    res.json({
-      plan_id: id,
-      released_amount: amountSaved,
-      released: amountSaved > 0,
-    });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Failed to complete savings plan' });
-  } finally {
-    client.release();
-  }
-});
+
 
 // Add new transaction
 function validateTransactionInput(body) {
@@ -544,27 +494,98 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-// Top N spending categories for the current month.
+// Validates and normalizes the optional ?month query param shared by the
+// /api/spending-by-category and /api/spending-by-account endpoints. Accepts
+// any string parseable as YYYY-MM-DD (the DB call normalizes it to the first
+// of the month via date_trunc). Returns either a valid YYYY-MM-DD string or
+// null, in which case the caller treats it as "current month."
+//
+// Reject anything that doesn't match the regex outright so a malformed param
+// doesn't reach the DB and trigger a 500 — instead the caller will fall back
+// to current-month behavior, which is the same as if the param were absent.
+function parseMonthParam(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  // Sanity-check that it's actually a real date (rejects 2026-13-01 etc.)
+  const d = new Date(s + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return null;
+  return s;
+}
+
+// Top N spending categories for a given month (defaults to current month).
 // Returns: [{ category, total }, ...] sorted by total descending.
 // Filters to type='Spending' (discretionary) by design — Bills are excluded
 // because they're fixed obligations and would dominate the chart every month.
+// The optional ?month=YYYY-MM-DD param selects a historical month; the DB
+// truncates to first-of-month so any day within the month works the same.
 app.get('/api/spending-by-category', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit, 10);
     if (isNaN(limit) || limit < 1) limit = 5;
     if (limit > 20) limit = 20;
     
+    const month = parseMonthParam(req.query.month);
+    
     const result = await pool.query(`
       SELECT category, SUM(amount)::numeric AS total
       FROM transactions
       WHERE type = 'Spending'
-        AND month = date_trunc('month', CURRENT_DATE)::date
+        AND month = date_trunc('month', COALESCE($2::date, CURRENT_DATE))::date
         AND category IS NOT NULL
         AND category != ''
       GROUP BY category
       ORDER BY total DESC
       LIMIT $1
-    `, [limit]);
+    `, [limit, month]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Top N accounts by accumulated spend for a given month (defaults to current).
+// Returns: [{ account, total }, ...] sorted by total descending.
+//
+// Different filter rationale than /api/spending-by-category:
+// the goal here is "what hit each card / account this month" — so we include
+// Spending + Bills + Savings (anything that flows OUT against an account).
+// Income and Transfer are excluded (no outflow), and GoalRelease is system-
+// only and shouldn't appear in user-facing totals.
+//
+// The 'N/A' account is excluded because by convention it marks transactions
+// that didn't touch a credit card / tracked account (e.g. paying a person
+// directly from checking, setting money aside as savings). The card on the
+// Home tab is meant to surface card activity, so N/A would muddy that view.
+// Match is case-insensitive and trims whitespace to catch typo variants
+// ('n/a', ' N/A ', etc.).
+//
+// Optional ?month=YYYY-MM-DD param selects a historical month, same convention
+// as /api/spending-by-category.
+//
+// Despite the path containing "spending", "spend" here means "outflow against
+// the account" — the broader sense than the Spending transaction type.
+app.get('/api/spending-by-account', async (req, res) => {
+  try {
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 5;
+    if (limit > 20) limit = 20;
+    
+    const month = parseMonthParam(req.query.month);
+    
+    const result = await pool.query(`
+      SELECT account, SUM(amount)::numeric AS total
+      FROM transactions
+      WHERE type IN ('Spending', 'Bills', 'Savings')
+        AND month = date_trunc('month', COALESCE($2::date, CURRENT_DATE))::date
+        AND account IS NOT NULL
+        AND account != ''
+        AND LOWER(TRIM(account)) != 'n/a'
+      GROUP BY account
+      ORDER BY total DESC
+      LIMIT $1
+    `, [limit, month]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -602,17 +623,22 @@ function validateRecurring(body) {
     errors.push(`type must be one of: ${VALID_TYPES.join(', ')}`);
   }
   if (!body.payee || !String(body.payee).trim()) errors.push('payee is required');
-  if (!body.category || !String(body.category).trim()) errors.push('category is required');
-  if (!body.account || !String(body.account).trim()) errors.push('account is required');
+  // category and account are optional in the schema (both columns allow null;
+  // account has a default of 'Paypal'). Earlier validator required them,
+  // which broke PUT for rows that had null in either field.
   const amountNum = parseFloat(body.amount);
   if (isNaN(amountNum) || amountNum <= 0) errors.push('amount must be a positive number');
   if (!VALID_FREQUENCIES.includes(body.frequency)) {
     errors.push(`frequency must be one of: ${VALID_FREQUENCIES.join(', ')}`);
   }
-  if (!body.start_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.start_date)) {
+  // Accept either YYYY-MM-DD or a full ISO timestamp; Postgres serializes
+  // date columns as timestamps when round-tripping through JSON, so the
+  // client may resend them in that form (e.g., on pause/resume).
+  const dateRegex = /^\d{4}-\d{2}-\d{2}(T.*)?$/;
+  if (!body.start_date || !dateRegex.test(body.start_date)) {
     errors.push('start_date must be in YYYY-MM-DD format');
   }
-  if (body.end_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.end_date)) {
+  if (body.end_date && !dateRegex.test(body.end_date)) {
     errors.push('end_date must be in YYYY-MM-DD format if provided');
   }
   return errors;
@@ -675,12 +701,16 @@ app.post('/api/recurring', async (req, res) => {
     if (create_first_payment_today) {
       // Insert a transactions row dated today, mirroring the recurring entry.
       // The transactions table's "month" column gets computed from today's date.
+      // Link the first-payment-today transaction back to the recurring
+      // template just inserted, so spending_power treats it as already
+      // accounted-for (not as ad-hoc).
+      const recurringId = result.rows[0].id;
       const txResult = await client.query(`
-        INSERT INTO transactions (transaction_date, month, type, amount, category, description, payee, account)
+        INSERT INTO transactions (transaction_date, month, type, amount, category, description, payee, account, recurring_id)
         VALUES (
           CURRENT_DATE,
           date_trunc('month', CURRENT_DATE)::date,
-          $1, $2, $3, $4, $5, $6
+          $1, $2, $3, $4, $5, $6, $7
         )
         RETURNING *
       `, [
@@ -690,6 +720,7 @@ app.post('/api/recurring', async (req, res) => {
         description || null,
         payee.trim(),
         account || null,
+        recurringId,
       ]);
       firstTransaction = txResult.rows[0];
     }

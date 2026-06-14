@@ -18,6 +18,84 @@ function closeOnBackdropClick(overlayEl, closeFn) {
 let currentType = 'Spending';
 let currentBaseline = 0;  // tracked so the edit modal can pre-fill it
 
+// ============================================
+// Month stepper state — controls which month the two "Top X" cards on Home
+// display. Defaults to the current month and can be walked back with the
+// stepper arrows. Other parts of Home (header, runway, Recent, Goals) are
+// always live and not affected by this state.
+// ============================================
+
+// First-of-month Date for the month currently displayed in the Top X cards.
+// Initialized to the current month at script-load time. Functions below
+// re-derive "current month" from `new Date()` on every check so a month
+// rollover during a long session is handled correctly.
+let displayedMonth = firstOfMonth(new Date());
+
+// Returns a new Date pinned to the first of the given date's month, at
+// midnight local time. We work in local time throughout so the displayed
+// month matches the user's wall clock.
+function firstOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+// YYYY-MM-DD for the displayed month, suitable for the ?month= query param.
+function displayedMonthParam() {
+    const y = displayedMonth.getFullYear();
+    const m = String(displayedMonth.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+}
+
+// True iff displayedMonth equals the live current month. Used to decide
+// whether to send ?month= (don't bother when on current month) and whether
+// the heading text gets the "Top" prefix.
+function isDisplayedMonthCurrent() {
+    const now = firstOfMonth(new Date());
+    return displayedMonth.getTime() === now.getTime();
+}
+
+// Move the displayed month by delta (typically -1 or +1). Forward past the
+// current month is clamped — the cards have no future data to show.
+function stepDisplayedMonth(delta) {
+    const next = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + delta, 1);
+    const currentMonth = firstOfMonth(new Date());
+    // Clamp to current month — never advance past it
+    if (next.getTime() > currentMonth.getTime()) return;
+    displayedMonth = next;
+    updateMonthlyHeadings();
+    updateMonthStepperUI();
+    loadTopCategories();
+    loadTopAccounts();
+}
+
+// Refreshes the stepper widget itself: the label text and the disabled state
+// of the right arrow (left arrow is never disabled — let users discover the
+// data boundary by clicking back into an empty month rather than maintaining
+// a "min month" query at startup).
+function updateMonthStepperUI() {
+    const label = document.getElementById('monthStepperLabel');
+    const nextBtn = document.getElementById('monthStepperNext');
+    if (label) {
+        label.textContent = displayedMonth.toLocaleString(undefined, { month: 'long' });
+    }
+    if (nextBtn) {
+        nextBtn.disabled = isDisplayedMonthCurrent();
+    }
+}
+
+// Updates the two card headings to reflect the displayed month. When on the
+// current month, prefixed with "Top" (per the original design); when looking
+// at a past month, the "Top" prefix is dropped so the wording makes it clear
+// these aren't live rankings — "March categories" reads as a historical
+// retrospective rather than an active leaderboard.
+function updateMonthlyHeadings() {
+    const monthName = displayedMonth.toLocaleString(undefined, { month: 'long' });
+    const prefix = isDisplayedMonthCurrent() ? 'Top ' : '';
+    const cats = document.getElementById('topCategoriesHeading');
+    const accts = document.getElementById('topAccountsHeading');
+    if (cats) cats.textContent = `${prefix}${monthName} categories`;
+    if (accts) accts.textContent = `${prefix}${monthName} balances`;
+}
+
 async function loadSpendingPower() {
     // Keep the month label in sync. Cheap, and means if the user has the app
     // open across midnight on the last day of the month, it'll update on the
@@ -26,6 +104,7 @@ async function loadSpendingPower() {
     if (phMonth) {
         phMonth.textContent = new Date().toLocaleString(undefined, { month: 'long' });
     }
+    
     try {
         const response = await fetch(`${API_URL}/spending-power`);
         const data = await response.json();
@@ -266,18 +345,23 @@ async function loadAccounts() {
 // ============================================
 
 async function loadGoals() {
-    // Fetch all three sources in parallel
-    const [installments, savingsPlans, savingsGoals] = await Promise.all([
+    // Fetch installments and open goals in parallel.
+    // (Saving plans dropped in stage 4a — recurring Savings with end_date no
+    // longer surfaces as a tracked plan. The endpoint and view still exist
+    // server-side; remove in stage 6 cleanup once confirmed unmissed.)
+    const [installments, savingsGoals] = await Promise.all([
         fetchJSON(`${API_URL}/installments`).catch(err => { console.error(err); return []; }),
-        fetchJSON(`${API_URL}/savings-plans`).catch(err => { console.error(err); return []; }),
         fetchJSON(`${API_URL}/goals`).catch(err => { console.error(err); return []; }),
     ]);
     
     renderInstallments(installments);
-    renderSavingsPlans(savingsPlans);
     renderSavingsGoals(savingsGoals);
     
-    document.getElementById('goalsCard').classList.remove('empty');
+    // Hide the whole card if both sections came back empty. Each render function
+    // toggles its own .empty class; this just rolls those up to the card.
+    const hasInstallments = Array.isArray(installments) && installments.length > 0;
+    const hasGoals = Array.isArray(savingsGoals) && savingsGoals.length > 0;
+    document.getElementById('goalsCard').classList.toggle('empty', !hasInstallments && !hasGoals);
 }
 
 async function fetchJSON(url) {
@@ -289,11 +373,15 @@ async function fetchJSON(url) {
 function renderInstallments(items) {
     const section = document.getElementById('installmentsSection');
     const list = document.getElementById('installmentsList');
-    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        list.innerHTML = '<div class="goal-empty-state">No installment plans detected. Add a Spending-type recurring transaction with a number of payments to track one here.</div>';
+        // Hide the whole section — no header, no placeholder. The empty state
+        // explanation lived here before; it's been removed in favor of just
+        // disappearing the section so an empty Home stays compact.
+        section.classList.add('empty');
+        list.innerHTML = '';
         return;
     }
+    section.classList.remove('empty');
     list.innerHTML = items.map(renderInstallment).join('');
 }
 
@@ -338,52 +426,17 @@ function renderInstallment(it) {
     `;
 }
 
-// Auto-detected savings plans (recurring Savings with end_date). Parallel to
-// installments but presents progress in savings-positive language ("saved" vs "paid")
-// and is tappable to mark complete.
-function renderSavingsPlans(items) {
-    const section = document.getElementById('savingsPlansSection');
-    const list = document.getElementById('savingsPlansList');
-    section.classList.remove('empty');
-    if (!Array.isArray(items) || items.length === 0) {
-        list.innerHTML = '<div class="goal-empty-state">No saving plans yet. Add a Savings-type recurring transaction with a number of payments to track one here.</div>';
-        return;
-    }
-    list.innerHTML = items.map(renderSavingsPlan).join('');
-}
-
-function renderSavingsPlan(p) {
-    const pctSaved = parseFloat(p.pct_saved) || 0;
-    const saved = parseFloat(p.amount_saved).toFixed(2);
-    const target = parseFloat(p.target_amount).toFixed(2);
-    const fillWidth = Math.min(100, pctSaved * 100).toFixed(1);
-    const isComplete = pctSaved >= 1;
-    const pctClass = isComplete ? 'complete' : '';
-    return `
-        <div class="goal-item" data-plan-id="${p.id}" data-source="plan">
-            <div class="goal-item-header">
-                <div class="goal-name">${escapeHtml(p.name)}</div>
-                <div class="goal-amount">$${saved} / $${target}</div>
-            </div>
-            <div class="goal-progress-bar">
-                <div class="goal-progress-fill ${pctClass}" style="width: ${fillWidth}%"></div>
-            </div>
-            <div class="goal-meta">
-                <span>${p.payments_made} of ${p.total_periods} contributions • ends ${p.end_date.slice(0, 10)}</span>
-                <span class="goal-pct ${pctClass}">${Math.round(pctSaved * 100)}%</span>
-            </div>
-        </div>
-    `;
-}
-
 function renderSavingsGoals(items) {
     const section = document.getElementById('savingsGoalsSection');
     const list = document.getElementById('savingsGoalsList');
-    section.classList.remove('empty');
     if (!Array.isArray(items) || items.length === 0) {
-        list.innerHTML = '<div class="goal-empty-state">No savings goals yet. Click + New goal above to create one.</div>';
+        // Hide the whole section. Creating new open goals lives on the Plan tab,
+        // so there's no in-card affordance to point at from an empty state.
+        section.classList.add('empty');
+        list.innerHTML = '';
         return;
     }
+    section.classList.remove('empty');
     list.innerHTML = items.map(renderSavingsGoal).join('');
 }
 
@@ -450,7 +503,9 @@ function openGoalModalForEdit(goal) {
     goalModal.classList.add('active');
 }
 
-document.getElementById('addGoalBtn').addEventListener('click', openGoalModalForAdd);
+// (The "+ New open goal" button on the Home goals card was removed — open-goal
+// creation lives on the Plan tab now. openGoalModalForAdd is still used from
+// the Plan-tab picker, so it stays defined above.)
 document.getElementById('goalCancelBtn').addEventListener('click', () => goalModal.classList.remove('active'));
 closeOnBackdropClick(goalModal, () => goalModal.classList.remove('active'));
 
@@ -465,43 +520,6 @@ document.getElementById('savingsGoalsList').addEventListener('click', async (e) 
         const goal = goals.find(g => g.id === id);
         if (goal) openGoalModalForEdit(goal);
     } catch (err) {
-        console.error(err);
-    }
-});
-
-// Click on an auto-detected savings plan → confirm + complete it.
-// Auto-detected plans have no separate edit affordance (you edit by changing
-// the underlying recurring transaction in More → Recurring). The only inline
-// action is "I've spent the money — release it."
-document.getElementById('savingsPlansList').addEventListener('click', async (e) => {
-    const item = e.target.closest('.goal-item');
-    if (!item) return;
-    const id = parseInt(item.dataset.planId, 10);
-    if (isNaN(id)) return;
-    if (!confirm('Mark this saving plan complete? This will release the saved amount back into spending power and stop the recurring contribution. Use this when you\'ve actually made the purchase.')) return;
-    try {
-        const resp = await fetch(`${API_URL}/savings-plans/${id}/complete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-        });
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'Could not complete plan');
-        }
-        const result = await resp.json();
-        await loadGoals();
-        await loadSpendingPower();
-        await loadRecentTransactions();
-        await loadTopCategories();
-        if (result.released) {
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = `Plan complete — $${parseFloat(result.released_amount).toFixed(2)} released`;
-            successMsg.hidden = false;
-            successMsg.classList.add('show');
-            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
-        }
-    } catch (err) {
-        alert('Could not complete plan: ' + err.message);
         console.error(err);
     }
 });
@@ -584,6 +602,7 @@ document.getElementById('goalMarkCompleteBtn').addEventListener('click', async (
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         // If a release was created, show a confirmatory message
         if (result.released) {
             const successMsg = document.getElementById('successMsg');
@@ -623,11 +642,6 @@ document.querySelectorAll('.type-btn').forEach(btn => {
         document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         currentType = this.dataset.type;
-        // Recompute whether the "this repeats" toggle should be available.
-        // Transfer is conceptually a one-time event, so the toggle is hidden then.
-        updateRepeatsVisibility();
-        // If the payee already has a value, refresh the auto-name preview
-        updateAutoName();
     });
 });
 
@@ -637,6 +651,39 @@ let editingOriginalDate = null;  // preserved so we can show "Editing transactio
 const formCard = document.getElementById('formCard');
 const editBannerText = document.getElementById('editBannerText');
 const transactionDateInput = document.getElementById('transactionDate');
+
+// Tracks the account on the most recent transaction so the Add form can
+// auto-prefill it (people tend to use the same card several entries in a row).
+// Initialized once on page load from /api/transactions/recent, then updated
+// after every successful save so subsequent entries inherit the just-used
+// account. We deliberately don't update from the periodic refresh — that
+// could clobber whatever the user is in the middle of typing.
+let lastUsedAccount = '';
+
+// Restores the account field to lastUsedAccount. Called after form.reset()
+// (post-submit and on cancel-edit) so the field doesn't go blank between
+// entries. Safe to call when lastUsedAccount is '' — just leaves the field
+// empty, same as a fresh install with no history.
+function restoreLastUsedAccount() {
+    const accountInput = document.getElementById('account');
+    if (accountInput) accountInput.value = lastUsedAccount;
+}
+
+// One-shot initializer: fetch the most recent transaction and seed both
+// lastUsedAccount and the Add form's account field. Runs on page load.
+async function initLastUsedAccount() {
+    try {
+        const resp = await fetch(`${API_URL}/transactions/recent`);
+        const txns = await resp.json();
+        if (Array.isArray(txns) && txns.length > 0 && txns[0].account) {
+            lastUsedAccount = txns[0].account;
+            restoreLastUsedAccount();
+        }
+    } catch (err) {
+        // Non-fatal — if it fails, the field just starts empty
+        console.error('Failed to initialize last-used account:', err);
+    }
+}
 
 function todayString() {
     return new Date().toISOString().slice(0, 10);
@@ -650,226 +697,14 @@ function setTypeButton(type) {
     const target = document.querySelector(`.type-btn[data-type="${type}"]`);
     if (target) target.classList.add('active');
     currentType = type;
-    updateRepeatsVisibility();
 }
 
-// ============================================
-// "This repeats" toggle and conditional fields (stage 4)
-// ============================================
-//
-// When isRepeating = true, the form submits to /api/recurring instead of /api/transactions.
-// The toggle is hidden when type=Transfer (no recurring transfers).
-
-let isRepeating = false;
-
-const repeatsRow = document.getElementById('repeatsRow');
-const repeatsToggle = document.getElementById('repeatsToggle');
-const repeatsFields = document.getElementById('repeatsFields');
-const repName = document.getElementById('repName');
-const repFrequency = document.getElementById('repFrequency');
-const repDayOfMonth = document.getElementById('repDayOfMonth');
-const repNumPayments = document.getElementById('repNumPayments');
-const repEndPreview = document.getElementById('repEndPreview');
-const repTotalGroup = document.getElementById('repTotalGroup');
-const repTotalAmount = document.getElementById('repTotalAmount');
-const addPayTodayToggle = document.getElementById('addPayTodayToggle');
-const payeeInput = document.getElementById('payee');
-const amountInput = document.getElementById('amount');
-
-// Two-way sync between Amount (per-payment) and Total amount (the calculator helper).
-// The Amount field is the source of truth for saving; the Total field is purely a UI
-// convenience. When the user types in either, the other updates. Number of payments
-// must be set, otherwise the Total field is hidden (the math has no operand).
-//
-// A 'syncing' flag prevents infinite recursion (typing in one triggers an input event
-// on the other if we just set its value).
-let syncing = false;
-
-function syncTotalFromAmount() {
-    if (syncing) return;
-    const n = parseInt(repNumPayments.value, 10);
-    const per = parseFloat(amountInput.value);
-    if (isNaN(n) || n < 1 || isNaN(per)) {
-        // Can't compute; leave Total blank
-        syncing = true;
-        repTotalAmount.value = '';
-        syncing = false;
-        return;
-    }
-    syncing = true;
-    repTotalAmount.value = (per * n).toFixed(2);
-    syncing = false;
-}
-
-function syncAmountFromTotal() {
-    if (syncing) return;
-    const n = parseInt(repNumPayments.value, 10);
-    const total = parseFloat(repTotalAmount.value);
-    if (isNaN(n) || n < 1 || isNaN(total)) return;
-    syncing = true;
-    amountInput.value = (total / n).toFixed(2);
-    syncing = false;
-}
-
-// Total field visibility: only relevant when "this repeats" is on AND number of
-// payments is set. Otherwise hidden (it has no meaning).
-function updateTotalFieldVisibility() {
-    const n = parseInt(repNumPayments.value, 10);
-    const shouldShow = isRepeating && !isNaN(n) && n >= 1;
-    if (shouldShow) {
-        repTotalGroup.removeAttribute('hidden');
-        syncTotalFromAmount();  // populate it based on current Amount
-    } else {
-        repTotalGroup.setAttribute('hidden', '');
-    }
-}
-
-repTotalAmount.addEventListener('input', syncAmountFromTotal);
-amountInput.addEventListener('input', syncTotalFromAmount);
-
-function updateRepeatsVisibility() {
-    // Hide the toggle row entirely on Transfer (and force isRepeating off if active)
-    if (currentType === 'Transfer') {
-        repeatsRow.setAttribute('hidden', '');
-        if (isRepeating) {
-            isRepeating = false;
-            repeatsToggle.classList.remove('active');
-            repeatsToggle.setAttribute('aria-pressed', 'false');
-            repeatsFields.setAttribute('hidden', '');
-        }
-    } else {
-        repeatsRow.removeAttribute('hidden');
-    }
-    updateSubmitButtonLabel();
-}
-
+// Submit-button label changes only in edit mode now that the Add tab handles
+// single-instance transactions only.
 function updateSubmitButtonLabel() {
     const btn = document.querySelector('#transactionForm .submit-btn');
     if (!btn) return;
-    if (editingTransactionId !== null) {
-        btn.textContent = 'Update Transaction';
-        return;
-    }
-    if (!isRepeating) {
-        btn.textContent = 'Add Transaction';
-        return;
-    }
-    // Repeating: label differs by type, and finite ("number of payments" set) is
-    // called a "plan", while indefinite is "recurring".
-    const hasEnd = repNumPayments.value.trim() && parseInt(repNumPayments.value, 10) >= 1;
-    if (hasEnd) {
-        // Finite — a structured plan
-        if (currentType === 'Spending') btn.textContent = 'Save Installment Plan';
-        else if (currentType === 'Savings') btn.textContent = 'Save Saving Plan';
-        else if (currentType === 'Bills') btn.textContent = 'Save Bill Plan';
-        else if (currentType === 'Income') btn.textContent = 'Save Income Plan';
-        else btn.textContent = 'Save Plan';
-    } else {
-        // Indefinite — just a recurring template
-        if (currentType === 'Bills') btn.textContent = 'Save Recurring Bill';
-        else if (currentType === 'Income') btn.textContent = 'Save Recurring Income';
-        else if (currentType === 'Savings') btn.textContent = 'Save Recurring Saving';
-        else if (currentType === 'Spending') btn.textContent = 'Save Recurring Spending';
-        else btn.textContent = 'Save Recurring';
-    }
-}
-
-repeatsToggle.addEventListener('click', () => {
-    isRepeating = !isRepeating;
-    repeatsToggle.classList.toggle('active', isRepeating);
-    repeatsToggle.setAttribute('aria-pressed', isRepeating ? 'true' : 'false');
-    if (isRepeating) {
-        repeatsFields.removeAttribute('hidden');
-        updateAutoName();
-        updateRepEndPreview();
-    } else {
-        repeatsFields.setAttribute('hidden', '');
-    }
-    updateTotalFieldVisibility();
-    updateSubmitButtonLabel();
-});
-
-addPayTodayToggle.addEventListener('click', () => {
-    const on = !addPayTodayToggle.classList.contains('active');
-    addPayTodayToggle.classList.toggle('active', on);
-    addPayTodayToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-});
-
-// Auto-derive the recurring entry's "Name" from payee + frequency.
-// Updates only when the field hasn't been manually edited (the dataset.userEdited flag tracks this).
-function updateAutoName() {
-    if (!isRepeating) return;
-    if (repName.dataset.userEdited === 'true') return;
-    const payee = payeeInput.value.trim();
-    if (!payee) {
-        repName.value = '';
-        return;
-    }
-    const freqLabel = repFrequency.options[repFrequency.selectedIndex].text.toLowerCase();
-    repName.value = `${payee} ${freqLabel}`;
-}
-
-// Track when the user has manually edited the name field; from then on, don't auto-overwrite
-repName.addEventListener('input', () => {
-    repName.dataset.userEdited = 'true';
-});
-
-// Trigger auto-name on payee or frequency changes
-payeeInput.addEventListener('input', updateAutoName);
-repFrequency.addEventListener('change', () => {
-    updateAutoName();
-    updateRepEndPreview();
-});
-
-// End-date preview from start_date (today) + frequency + number of payments
-function updateRepEndPreview() {
-    const n = parseInt(repNumPayments.value, 10);
-    if (isNaN(n) || n < 1) {
-        repEndPreview.textContent = '';
-        updateSubmitButtonLabel();
-        return;
-    }
-    const startStr = transactionDateInput.value || todayString();
-    const freq = repFrequency.value;
-    const end = computeEndDateFromNumPaymentsAdd(startStr, freq, n);
-    repEndPreview.textContent = `= ends ${end} (${n} payment${n === 1 ? '' : 's'})`;
-    updateSubmitButtonLabel();
-}
-
-// Compute end_date from start_date + frequency + N. Inclusive: N payments means
-// the first on start_date and the Nth on the returned end_date.
-function computeEndDateFromNumPaymentsAdd(startDateStr, frequency, n) {
-    const d = new Date(startDateStr + 'T00:00:00');
-    const periods = n - 1;
-    if (frequency === 'monthly')  d.setMonth(d.getMonth() + periods);
-    else if (frequency === 'weekly')   d.setDate(d.getDate() + periods * 7);
-    else if (frequency === 'biweekly') d.setDate(d.getDate() + periods * 14);
-    else if (frequency === 'yearly')   d.setFullYear(d.getFullYear() + periods);
-    return d.toISOString().slice(0, 10);
-}
-
-repNumPayments.addEventListener('input', () => {
-    updateRepEndPreview();
-    updateTotalFieldVisibility();
-});
-transactionDateInput.addEventListener('input', updateRepEndPreview);
-
-// Reset the repeats section to its default state (called after successful submit)
-function resetRepeats() {
-    isRepeating = false;
-    repeatsToggle.classList.remove('active');
-    repeatsToggle.setAttribute('aria-pressed', 'false');
-    repeatsFields.setAttribute('hidden', '');
-    repName.value = '';
-    delete repName.dataset.userEdited;
-    repFrequency.value = 'monthly';
-    repDayOfMonth.value = '';
-    repNumPayments.value = '';
-    repEndPreview.textContent = '';
-    repTotalAmount.value = '';
-    repTotalGroup.setAttribute('hidden', '');
-    addPayTodayToggle.classList.remove('active');
-    addPayTodayToggle.setAttribute('aria-pressed', 'false');
+    btn.textContent = editingTransactionId !== null ? 'Update Transaction' : 'Add Transaction';
 }
 
 function enterEditMode(t) {
@@ -891,13 +726,6 @@ function enterEditMode(t) {
     
     // Editing applies only to one-time transactions; force isRepeating off and hide
     // the repeats row so the user can't try to convert during edit.
-    if (isRepeating) {
-        isRepeating = false;
-        repeatsToggle.classList.remove('active');
-        repeatsToggle.setAttribute('aria-pressed', 'false');
-        repeatsFields.setAttribute('hidden', '');
-    }
-    repeatsRow.setAttribute('hidden', '');
     updateSubmitButtonLabel();
     
     // Switch to the Add tab so the form is actually visible
@@ -916,8 +744,8 @@ function exitEditMode() {
     setTypeButton('Spending');
     // form.reset() clears the date input too, so restore today
     transactionDateInput.value = todayString();
-    // setTypeButton('Spending') already called updateRepeatsVisibility(),
-    // which shows the repeats row for non-Transfer types.
+    // form.reset() also blanks the account; refill it with the last-used one
+    restoreLastUsedAccount();
     updateSubmitButtonLabel();
 }
 
@@ -931,112 +759,63 @@ document.getElementById('transactionForm').addEventListener('submit', async func
     submitBtn.textContent = 'Saving...';
     submitBtn.disabled = true;
     
-    // Branch: are we creating a recurring entry, or a regular transaction?
-    // Recurring entries always create on a new entity in /api/recurring, even when
-    // editing isn't supported in this flow (edit-mode is only for one-time transactions).
-    const wantsRecurring = isRepeating && !isEditing;
-    
     try {
-        if (wantsRecurring) {
-            // Compute end_date from number of payments if provided
-            const startDate = transactionDateInput.value;
-            const freq = repFrequency.value;
-            const nRaw = repNumPayments.value.trim();
-            const n = nRaw ? parseInt(nRaw, 10) : null;
-            let endDate = null;
-            if (n && n >= 1 && startDate) {
-                endDate = computeEndDateFromNumPaymentsAdd(startDate, freq, n);
-            }
-            
-            const payload = {
-                name: repName.value.trim() || `${document.getElementById('payee').value.trim()} ${freq}`,
-                type: currentType,
-                payee: document.getElementById('payee').value.trim(),
-                category: document.getElementById('category').value.trim() || null,
-                amount: parseFloat(document.getElementById('amount').value),
-                account: document.getElementById('account').value.trim() || null,
-                description: document.getElementById('description').value.trim() || null,
-                frequency: freq,
-                day_of_month: repDayOfMonth.value || null,
-                start_date: startDate,
-                end_date: endDate,
-                create_first_payment_today: addPayTodayToggle.classList.contains('active'),
-            };
-            
-            const resp = await fetch(`${API_URL}/recurring`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                const detail = err.details ? '\n\n' + err.details.join('\n') : '';
-                throw new Error((err.error || 'Save failed') + detail);
-            }
-            
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = endDate ? 'Installment plan saved!' : 'Recurring transaction saved!';
-            successMsg.hidden = false;
-            successMsg.classList.add('show');
-            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
-            
-            await loadSpendingPower();
-            await loadRecentTransactions();
-            await loadTopCategories();
-            await loadGoals();
-            
-            // Reset form for next entry — stay on Add tab, ready to go
+        const transaction = {
+            transaction_date: transactionDateInput.value,
+            type: currentType,
+            amount: parseFloat(document.getElementById('amount').value),
+            category: document.getElementById('category').value,
+            description: document.getElementById('description').value,
+            payee: document.getElementById('payee').value,
+            account: document.getElementById('account').value,
+        };
+        
+        const url = isEditing
+            ? `${API_URL}/transactions/${editingTransactionId}`
+            : `${API_URL}/transactions`;
+        const method = isEditing ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transaction)
+        });
+        
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            const detail = err.details ? '\n\n' + err.details.join('\n') : '';
+            throw new Error((err.error || 'Save failed') + detail);
+        }
+        
+        const successMsg = document.getElementById('successMsg');
+        successMsg.textContent = isEditing ? 'Transaction updated!' : 'Transaction added!';
+        successMsg.hidden = false;
+        successMsg.classList.add('show');
+        setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
+        
+        // Remember the account just used so the next entry inherits it.
+        // Tracked in both edit and add paths — if you edit a transaction
+        // and change its account, that's also a signal of "current account."
+        if (transaction.account) {
+            lastUsedAccount = transaction.account;
+        }
+        
+        await loadSpendingPower();
+        await loadRecentTransactions();
+        await loadTopCategories();
+        await loadTopAccounts();
+        await loadGoals();
+        
+        if (isEditing) {
+            exitEditMode();
+        } else {
             this.reset();
             setTypeButton('Spending');
             transactionDateInput.value = todayString();
-            resetRepeats();
-        } else {
-            // One-time transaction: POST or PUT
-            const transaction = {
-                transaction_date: transactionDateInput.value,
-                type: currentType,
-                amount: parseFloat(document.getElementById('amount').value),
-                category: document.getElementById('category').value,
-                description: document.getElementById('description').value,
-                payee: document.getElementById('payee').value,
-                account: document.getElementById('account').value,
-            };
-            
-            const url = isEditing
-                ? `${API_URL}/transactions/${editingTransactionId}`
-                : `${API_URL}/transactions`;
-            const method = isEditing ? 'PUT' : 'POST';
-            
-            const response = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(transaction)
-            });
-            
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                const detail = err.details ? '\n\n' + err.details.join('\n') : '';
-                throw new Error((err.error || 'Save failed') + detail);
-            }
-            
-            const successMsg = document.getElementById('successMsg');
-            successMsg.textContent = isEditing ? 'Transaction updated!' : 'Transaction added!';
-            successMsg.hidden = false;
-            successMsg.classList.add('show');
-            setTimeout(() => { successMsg.classList.remove('show'); successMsg.hidden = true; }, 3000);
-            
-            await loadSpendingPower();
-            await loadRecentTransactions();
-            await loadTopCategories();
-            await loadGoals();
-            
-            if (isEditing) {
-                exitEditMode();
-            } else {
-                this.reset();
-                setTypeButton('Spending');
-                transactionDateInput.value = todayString();
-            }
+            // Re-apply the auto-prefilled account so the next entry doesn't
+            // start blank — most people enter a few transactions on the same
+            // card in a row.
+            restoreLastUsedAccount();
         }
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -1156,12 +935,11 @@ document.getElementById('recentList').addEventListener('click', async (e) => {
     if (trigger.dataset.action === 'confirm-delete') {
         openDeleteConfirm(id);
     } else if (trigger.dataset.action === 'edit') {
-        // Need the full row to pre-fill the form. Refetch the recent list and find this id.
         try {
-            const resp = await fetch(`${API_URL}/transactions/recent`);
-            const items = await resp.json();
-            const t = items.find(x => x.id === id);
-            if (t) enterEditMode(t);
+            const resp = await fetch(`${API_URL}/transactions/${id}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const t = await resp.json();
+            enterEditMode(t);
         } catch (err) {
             console.error('Failed to load transaction for edit:', err);
         }
@@ -1200,6 +978,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         await loadGoals();
     } catch (err) {
         alert('Failed to delete. Please try again.');
@@ -1261,31 +1040,10 @@ saveBaselineBtn.addEventListener('click', async () => {
 });
 
 // ===== Recurring transactions modal =====
+// Modal only renders the form view now; the picker on the Plan tab is the
+// entry point. List management happens on the Plan tab itself.
 const recurringModal = document.getElementById('recurringModal');
-const recurringListView = document.getElementById('recurringListView');
-const recurringFormView = document.getElementById('recurringFormView');
-const recurringList = document.getElementById('recurringList');
 let editingRecurringId = null;  // null = adding new
-
-function showRecurringList() {
-    recurringListView.style.display = '';
-    recurringFormView.style.display = 'none';
-}
-
-function showRecurringForm() {
-    recurringListView.style.display = 'none';
-    recurringFormView.style.display = '';
-}
-
-document.getElementById('manageRecurringBtn').addEventListener('click', async () => {
-    showRecurringList();
-    recurringModal.classList.add('active');
-    await loadRecurringList();
-});
-
-document.getElementById('recurringCloseBtn').addEventListener('click', () => {
-    recurringModal.classList.remove('active');
-});
 
 closeOnBackdropClick(recurringModal, () => recurringModal.classList.remove('active'));
 
@@ -1324,85 +1082,10 @@ function transactionBadge(type) {
     return '';
 }
 
-async function loadRecurringList() {
-    try {
-        const response = await fetch(`${API_URL}/recurring`);
-        const items = await response.json();
-        
-        if (items.length === 0) {
-            recurringList.innerHTML = '<div class="empty-state">No recurring transactions yet.</div>';
-            return;
-        }
-        
-        // Group by type for readability
-        const groups = {};
-        items.forEach(item => {
-            if (!groups[item.type]) groups[item.type] = [];
-            groups[item.type].push(item);
-        });
-        
-        const typeOrder = ['Income', 'Bills', 'Savings', 'Spending'];
-        let html = '';
-        typeOrder.forEach(type => {
-            if (!groups[type]) return;
-            html += `<div class="section-header"><div class="section-title">${type}</div></div>`;
-            groups[type].forEach(item => {
-                const amount = parseFloat(item.amount).toFixed(2);
-                const meta = [
-                    item.frequency,
-                    item.payee,
-                    item.category,
-                    item.end_date ? `until ${item.end_date.slice(0,10)}` : null,
-                ].filter(Boolean).join(' · ');
-                const inactiveClass = item.is_active ? '' : ' inactive';
-                html += `
-                    <div class="recurring-row${inactiveClass}">
-                        <div class="recurring-info">
-                            <div class="recurring-name">${escapeHtml(item.name)} — $${amount}</div>
-                            <div class="recurring-meta">${escapeHtml(meta)}${item.is_active ? '' : ' · inactive'}</div>
-                        </div>
-                        <div class="recurring-actions">
-                            <button data-action="edit" data-id="${item.id}">Edit</button>
-                            <button data-action="delete" data-id="${item.id}" class="danger">Delete</button>
-                        </div>
-                    </div>
-                `;
-            });
-        });
-        recurringList.innerHTML = html;
-    } catch (err) {
-        console.error('Failed to load recurring:', err);
-        recurringList.innerHTML = '<div class="empty-state">Failed to load.</div>';
-    }
-}
-
-// Delegated click handler for edit/delete buttons in the list
-recurringList.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const id = parseInt(btn.dataset.id, 10);
-    const action = btn.dataset.action;
-    
-    if (action === 'edit') {
-        try {
-            const resp = await fetch(`${API_URL}/recurring`);
-            const items = await resp.json();
-            const item = items.find(i => i.id === id);
-            if (!item) return;
-            openRecurringFormForEdit(item);
-        } catch (err) { console.error(err); }
-    } else if (action === 'delete') {
-        if (!confirm('Delete this recurring transaction? This cannot be undone.')) return;
-        try {
-            const resp = await fetch(`${API_URL}/recurring/${id}`, { method: 'DELETE' });
-            if (!resp.ok) throw new Error('Delete failed');
-            await loadRecurringList();
-            await loadSpendingPower();
-        } catch (err) {
-            alert('Failed to delete.');
-            console.error(err);
-        }
-    }
+// Cancel button on the recurring modal form closes the modal entirely.
+// (Previously returned to a list view inside the modal; that view is gone.)
+document.getElementById('recurringFormCancelBtn').addEventListener('click', () => {
+    recurringModal.classList.remove('active');
 });
 
 // ===== Add/edit form =====
@@ -1436,16 +1119,10 @@ function syncPayTodayDefault() {
 }
 recTypeSelect.addEventListener('change', syncPayTodayDefault);
 
-document.getElementById('recurringAddNewBtn').addEventListener('click', () => {
-    openRecurringFormForAdd();
-});
-
-document.getElementById('recurringFormCancelBtn').addEventListener('click', () => {
-    showRecurringList();
-});
-
 function clearRecurringForm() {
-    document.getElementById('recName').value = '';
+    const nameInput = document.getElementById('recName');
+    nameInput.value = '';
+    delete nameInput.dataset.userEdited;
     document.getElementById('recType').value = 'Bills';
     document.getElementById('recPayee').value = '';
     document.getElementById('recCategory').value = '';
@@ -1461,14 +1138,62 @@ function clearRecurringForm() {
     setToggled(payTodayToggle, false);
 }
 
+// Auto-derive the recurring entry's "Name" from the payee, unless the user
+// has typed in the Name field. Tracking via dataset.userEdited so manual
+// edits stick. Cleared by clearRecurringForm() on each open.
+function updateRecAutoName() {
+    const nameInput = document.getElementById('recName');
+    if (nameInput.dataset.userEdited === 'true') return;
+    const payee = document.getElementById('recPayee').value.trim();
+    nameInput.value = payee;
+}
+
+// For the installment plan type only: compute per-payment from total amount
+// and number of payments. Shown as a read-only preview hint under the
+// Amount field. Save handler does the same calculation before posting.
+function updateInstallmentPreview() {
+    if (recurringModal.dataset.planType !== 'installment') return;
+    const amountHint = document.getElementById('recAmountHint');
+    const total = parseFloat(recAmountInput.value);
+    const n = parseInt(recNumPaymentsInput.value, 10);
+    if (isNaN(total) || total <= 0 || isNaN(n) || n < 1) {
+        amountHint.textContent = 'Enter the full purchase price; per-payment computed below.';
+        return;
+    }
+    const perPayment = total / n;
+    const rounded = perPayment.toFixed(2);
+    const actualTotal = (parseFloat(rounded) * n).toFixed(2);
+    const drift = Math.abs(parseFloat(actualTotal) - total) > 0.005;
+    if (drift) {
+        amountHint.textContent = `= $${rounded} per payment × ${n} (rounds to $${actualTotal}, off by $${(total - actualTotal).toFixed(2)})`;
+    } else {
+        amountHint.textContent = `= $${rounded} per payment × ${n}`;
+    }
+}
+
+recAmountInput.addEventListener('input', updateInstallmentPreview);
+recNumPaymentsInput.addEventListener('input', updateInstallmentPreview);
+
+document.getElementById('recPayee').addEventListener('input', updateRecAutoName);
+document.getElementById('recName').addEventListener('input', () => {
+    // If the user clears the Name field, restore auto-fill behavior. Otherwise
+    // mark as user-edited so further payee changes don't overwrite.
+    const nameInput = document.getElementById('recName');
+    if (nameInput.value === '') {
+        delete nameInput.dataset.userEdited;
+    } else {
+        nameInput.dataset.userEdited = 'true';
+    }
+});
+
 function openRecurringFormForAdd() {
     editingRecurringId = null;
     clearRecurringForm();
     document.getElementById('recurringFormTitle').textContent = 'Add recurring transaction';
     recActiveRow.style.display = 'none';
     payTodayRow.style.display = '';  // show the "pay today" option only when adding
+    updateInstallmentPreview();
     syncPayTodayDefault();
-    showRecurringForm();
 }
 
 function openRecurringFormForEdit(item) {
@@ -1499,8 +1224,105 @@ function openRecurringFormForEdit(item) {
     setToggled(recIsActiveBtn, !!item.is_active);
     recActiveRow.style.display = '';
     payTodayRow.style.display = 'none';  // can't retroactively pay today on edit
-    showRecurringForm();
 }
+
+// ===== Plan-type-aware modal opening (stage 4b) =====
+//
+// Each plan type maps to a preconfigured opening of the existing recurring modal.
+// We reuse openRecurringFormForAdd's logic, then layer on type-specific tweaks:
+// hide irrelevant fields, set sensible defaults, lock fields that shouldn't vary.
+// On edit, no plan-type is applied — all fields stay visible (we don't know
+// what plan-type a historical recurring entry was created as).
+
+function openRecurringFormForPlanType(planType) {
+    openRecurringFormForAdd();
+    applyPlanTypeToForm(planType);
+    recurringModal.dataset.planType = planType;
+}
+
+function applyPlanTypeToForm(planType) {
+    const numPaymentsField = document.getElementById('recNumPayments').closest('.form-group');
+    const endDatePreview = document.getElementById('recEndDatePreview');
+    const typeField = document.getElementById('recTypeField');
+    const typeSelect = document.getElementById('recType');
+    const titleEl = document.getElementById('recurringFormTitle');
+    const amountLabel = document.getElementById('recAmountLabel');
+    const amountHint = document.getElementById('recAmountHint');
+    const categoryInput = document.getElementById('recCategory');
+    
+    // Reset to default-visible state (matters when reopening the modal for a
+    // different plan type without a full page reload).
+    numPaymentsField.style.display = '';
+    endDatePreview.style.display = '';
+    typeField.style.display = '';
+    typeSelect.disabled = false;
+    payTodayRow.style.display = '';
+    amountLabel.textContent = 'Amount';
+    amountHint.hidden = true;
+    amountHint.textContent = '';
+    
+    if (planType === 'subscription') {
+        titleEl.textContent = 'New subscription';
+        // Subs are universally type=Spending, category=Sub in this app's model.
+        // Hide the type field (defining property, not a flexible default) and
+        // pre-fill category so the user can see + override if needed.
+        typeSelect.value = 'Spending';
+        typeField.style.display = 'none';
+        categoryInput.value = 'Sub';
+        // No end date for subscriptions
+        numPaymentsField.style.display = 'none';
+        endDatePreview.style.display = 'none';
+        // "Pay today" defaults ON — the "I just signed up" flow
+        setToggled(payTodayToggle, true);
+    } else if (planType === 'recurring') {
+        titleEl.textContent = 'New recurring item';
+        // Catch-all for bills, savings, or non-subscription Spending
+        // Type is user-selectable; default to Bills (the most common
+        // case for a fresh recurring obligation)
+        typeSelect.value = 'Bills';
+        numPaymentsField.style.display = 'none';
+        endDatePreview.style.display = 'none';
+        setToggled(payTodayToggle, false);
+    } else if (planType === 'installment') {
+        titleEl.textContent = 'New installment';
+        // Installments are Bills (commitments you can't easily skip) with an
+        // end date — locked so they consistently surface in installment_progress.
+        typeSelect.value = 'Bills';
+        typeSelect.disabled = true;
+        // Amount field repurposed: user enters total purchase price; per-payment
+        // is computed below as a read-only preview, and divided on save.
+        amountLabel.textContent = 'Total amount';
+        amountHint.hidden = false;
+        amountHint.textContent = 'Enter the full purchase price; per-payment computed below.';
+        // Pay-today hidden — installments start next period by convention
+        setToggled(payTodayToggle, false);
+        payTodayRow.style.display = 'none';
+    }
+}
+
+// Clear the planType tag when the modal closes so a subsequent open without
+// a planType (e.g., from an edit click) doesn't inherit stale state.
+const clearPlanTypeOnClose = new MutationObserver(() => {
+    if (!recurringModal.classList.contains('active')) {
+        delete recurringModal.dataset.planType;
+        // Reset field-hiding so the next open starts clean
+        const numPaymentsField = document.getElementById('recNumPayments').closest('.form-group');
+        const endDatePreview = document.getElementById('recEndDatePreview');
+        const typeField = document.getElementById('recTypeField');
+        const typeSelect = document.getElementById('recType');
+        const amountLabel = document.getElementById('recAmountLabel');
+        const amountHint = document.getElementById('recAmountHint');
+        numPaymentsField.style.display = '';
+        endDatePreview.style.display = '';
+        typeField.style.display = '';
+        typeSelect.disabled = false;
+        payTodayRow.style.display = '';
+        amountLabel.textContent = 'Amount';
+        amountHint.hidden = true;
+        amountHint.textContent = '';
+    }
+});
+clearPlanTypeOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
 
 // ===== End-date computation from "number of payments" =====
 //
@@ -1586,13 +1408,22 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
     if (numPayments && numPayments >= 1 && startDate) {
         endDate = computeEndDateFromNumPayments(startDate, frequency, numPayments);
     }
+
+    // For installments, the Amount input holds the TOTAL purchase price;
+    // the DB stores per-payment. Divide here (number of payments was already
+    // parsed above for the end_date calculation).
+    const enteredAmount = parseFloat(recAmountInput.value);
+    const isInstallment = recurringModal.dataset.planType === 'installment';
+    const amountForPayload = isInstallment && numPayments && numPayments >= 1
+        ? parseFloat((enteredAmount / numPayments).toFixed(2))
+        : enteredAmount;
     
     const payload = {
         name: document.getElementById('recName').value.trim(),
         type: document.getElementById('recType').value,
         payee: document.getElementById('recPayee').value.trim(),
         category: document.getElementById('recCategory').value.trim() || null,
-        amount: parseFloat(recAmountInput.value),
+        amount: amountForPayload,
         account: document.getElementById('recAccount').value.trim() || null,
         description: document.getElementById('recDescription').value.trim() || null,
         frequency,
@@ -1628,11 +1459,12 @@ document.getElementById('recurringFormSaveBtn').addEventListener('click', async 
             throw new Error((err.error || 'Save failed') + detail);
         }
         
-        showRecurringList();
-        await loadRecurringList();
+        // Close modal; the planTab MutationObserver will refresh the list
+        recurringModal.classList.remove('active');
         await loadSpendingPower();
         await loadRecentTransactions();
         await loadTopCategories();
+        await loadTopAccounts();
         await loadGoals();
     } catch (err) {
         alert('Failed to save.\n\n' + err.message);
@@ -1711,25 +1543,6 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e)
     }
 });
 
-// Refresh button: re-fetch all dynamic data and briefly spin the icon to acknowledge the action
-document.getElementById('refreshBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('refreshBtn');
-    btn.classList.add('spinning');
-    try {
-        await Promise.all([
-            loadSpendingPower(),
-            loadRecentTransactions(),
-            loadGoals(),
-            loadCategories(),
-            loadAccounts(),
-        ]);
-    } finally {
-        // Keep the spin running for at least 600ms (one full rotation) so the feedback feels
-        // deliberate even if the requests came back instantly.
-        setTimeout(() => btn.classList.remove('spinning'), 600);
-    }
-});
-
 // ============================================
 // Bottom navigation: tab switching (stage 1 of redesign)
 // ============================================
@@ -1740,9 +1553,21 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // it stays visible regardless of which tab is showing.
 
 function switchTab(tabName) {
+    // Leaving the Add tab while an edit is in progress is treated as an
+    // implicit cancel. Bottom-nav tabs read as context switches, and silently
+    // preserving edit state across tabs makes it too easy to come back later
+    // and overwrite the wrong transaction without realizing edit was still on.
+    // The visible Cancel button still handles the case where the user is on
+    // the Add tab and wants to back out.
+    const currentTab = document.querySelector('.tab-pane.active')?.dataset.tab;
+    if (currentTab === 'add' && tabName !== 'add' && editingTransactionId !== null) {
+        exitEditMode();
+    }
+    
     document.querySelectorAll('.tab-pane').forEach(pane => {
         pane.classList.toggle('active', pane.dataset.tab === tabName);
     });
+    // ... rest unchanged
     document.querySelectorAll('.nav-tab').forEach(btn => {
         const isActive = btn.dataset.target === tabName;
         btn.classList.toggle('active', isActive);
@@ -1789,19 +1614,33 @@ if (spToggle && phBreakdown) {
 // Most of the heavy lifting is reused: the existing recurring modal handles
 // add/edit, the existing transaction edit/delete flow handles inline actions.
 
-async function loadMoreRecurringList() {
-    const target = document.getElementById('moreRecurringList');
+// Filter state for the Plan tab recurring list. Default empty = show all types.
+const planFilters = { type: '' };
+
+async function loadPlanRecurringList() {
+    const target = document.getElementById('planRecurringList');
     if (!target) return;
     try {
         const response = await fetch(`${API_URL}/recurring`);
-        const items = await response.json();
+        let items = await response.json();
+        
+        // Apply type filter (client-side — the list is small enough that fetching
+        // everything and filtering locally is simpler than passing a query param
+        // and re-fetching on every chip click).
+        if (planFilters.type) {
+            items = items.filter(item => item.type === planFilters.type);
+        }
         
         if (!Array.isArray(items) || items.length === 0) {
-            target.innerHTML = '<div class="empty-state">No recurring transactions yet.</div>';
+            const msg = planFilters.type
+                ? `No ${planFilters.type} recurring transactions.`
+                : 'No recurring transactions yet.';
+            target.innerHTML = `<div class="empty-state">${msg}</div>`;
             return;
         }
         
-        // Group by type for readability (same grouping as the modal version)
+        // Group by type for readability (within the filtered subset; if filter
+        // is active there's only one group, but the same code handles it cleanly)
         const groups = {};
         items.forEach(item => {
             if (!groups[item.type]) groups[item.type] = [];
@@ -1829,7 +1668,7 @@ async function loadMoreRecurringList() {
                             <div class="more-recurring-meta">${escapeHtml(meta)}${item.is_active ? '' : ' · inactive'}</div>
                             <div class="more-recurring-row-actions">
                                 <button type="button" data-action="edit" data-rec-id="${item.id}">Edit</button>
-                                <button type="button" data-action="toggle-active" data-rec-id="${item.id}">${item.is_active ? 'Pause' : 'Resume'}</button>
+                                <button type="button" data-action="toggle-active" data-rec-id="${item.id}" class="${item.is_active ? '' : 'resume'}">${item.is_active ? 'Pause' : 'Resume'}</button>
                                 <button type="button" class="danger" data-action="delete" data-rec-id="${item.id}">Delete</button>
                             </div>
                         </div>
@@ -1845,8 +1684,18 @@ async function loadMoreRecurringList() {
     }
 }
 
+// Wire up the plan-tab type filter chips. Same pattern as historyTypeChips.
+document.querySelectorAll('#planTypeChips .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        document.querySelectorAll('#planTypeChips .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        planFilters.type = chip.dataset.filterType || '';
+        loadPlanRecurringList();
+    });
+});
+
 // Delegated handler for edit/toggle/delete actions in the recurring list
-document.getElementById('moreRecurringList').addEventListener('click', async (e) => {
+document.getElementById('planRecurringList').addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const id = parseInt(btn.dataset.recId, 10);
@@ -1876,7 +1725,7 @@ document.getElementById('moreRecurringList').addEventListener('click', async (e)
                 body: JSON.stringify({ ...item, is_active: !item.is_active }),
             });
             if (!updateResp.ok) throw new Error('Update failed');
-            await loadMoreRecurringList();
+            await loadPlanRecurringList();
             await loadSpendingPower();
             await loadGoals();
         } catch (err) {
@@ -1888,7 +1737,7 @@ document.getElementById('moreRecurringList').addEventListener('click', async (e)
         try {
             const resp = await fetch(`${API_URL}/recurring/${id}`, { method: 'DELETE' });
             if (!resp.ok) throw new Error('Delete failed');
-            await loadMoreRecurringList();
+            await loadPlanRecurringList();
             await loadSpendingPower();
             await loadGoals();
         } catch (err) {
@@ -1898,16 +1747,24 @@ document.getElementById('moreRecurringList').addEventListener('click', async (e)
     }
 });
 
-// "+ Add" opens the existing recurring modal in add mode
-document.getElementById('moreAddRecurringBtn').addEventListener('click', () => {
-    openRecurringFormForAdd();
-    recurringModal.classList.add('active');
+// Plan-type picker (stage 4b): each button preconfigures the recurring modal
+// for its type. "Open goal" branches to the separate goal modal.
+document.querySelectorAll('.plan-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const planType = btn.dataset.planType;
+        if (planType === 'open-goal') {
+            openGoalModalForAdd();
+        } else {
+            openRecurringFormForPlanType(planType);
+            recurringModal.classList.add('active');
+        }
+    });
 });
 
 // Refresh the More recurring list whenever the modal closes (in case something was edited)
 const refreshRecurringOnClose = new MutationObserver(() => {
     if (!recurringModal.classList.contains('active')) {
-        loadMoreRecurringList();
+        loadPlanRecurringList();
     }
 });
 refreshRecurringOnClose.observe(recurringModal, { attributes: true, attributeFilter: ['class'] });
@@ -2005,10 +1862,10 @@ document.getElementById('moreTransactionsList').addEventListener('click', async 
         openDeleteConfirm(id);
     } else if (trigger.dataset.action === 'edit') {
         try {
-            const resp = await fetch(`${API_URL}/transactions/recent`);
-            const items = await resp.json();
-            const t = items.find(x => x.id === id);
-            if (t) enterEditMode(t);
+            const resp = await fetch(`${API_URL}/transactions/${id}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const t = await resp.json();
+            enterEditMode(t);
         } catch (err) {
             console.error('Failed to load transaction for edit:', err);
         }
@@ -2104,9 +1961,7 @@ function switchSubTab(name) {
 }
 
 function loadActiveSubTabData(name) {
-    if (name === 'recurring') {
-        loadMoreRecurringList();
-    } else if (name === 'history') {
+    if (name === 'history') {
         loadMoreTransactionsList();
         populateCategoryFilter();
     } else if (name === 'settings') {
@@ -2125,7 +1980,7 @@ const moreRefreshOnSwitch = new MutationObserver(() => {
     const moreTab = document.getElementById('moreTab');
     if (moreTab && moreTab.classList.contains('active')) {
         const activeSub = document.querySelector('.sub-tab.active');
-        const name = activeSub ? activeSub.dataset.subtab : 'recurring';
+        const name = activeSub ? activeSub.dataset.subtab : 'history';
         loadActiveSubTabData(name);
     }
 });
@@ -2133,19 +1988,36 @@ moreRefreshOnSwitch.observe(document.getElementById('moreTab'), {
     attributes: true, attributeFilter: ['class']
 });
 
+// When the user switches to the Plan tab from the bottom nav, load the
+// recurring-transactions list. Same pattern as moreRefreshOnSwitch above.
+const planRefreshOnSwitch = new MutationObserver(() => {
+    const planTab = document.getElementById('planTab');
+    if (planTab && planTab.classList.contains('active')) {
+        loadPlanRecurringList();
+    }
+});
+planRefreshOnSwitch.observe(document.getElementById('planTab'), {
+    attributes: true, attributeFilter: ['class']
+});
+
 updateThemeSegments();
 
-// Render top spending categories on Home.
+// Render top spending categories on Home for the displayed month.
 // Fetches /api/spending-by-category, displays each with a proportion bar
-// where the largest category fills 100%. Hidden when there's no data yet.
+// where the largest category fills 100%. When viewing a past month, appends
+// ?month= so the server returns that month's data.
 async function loadTopCategories() {
     const target = document.getElementById('topCategoriesList');
     if (!target) return;
     try {
-        const resp = await fetch(`${API_URL}/spending-by-category?limit=5`);
+        const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-category?limit=5${monthParam}`);
         const rows = await resp.json();
         if (!Array.isArray(rows) || rows.length === 0) {
-            target.innerHTML = '<div class="top-categories-empty">No spending recorded this month yet.</div>';
+            const msg = isDisplayedMonthCurrent()
+                ? 'No spending recorded this month yet.'
+                : 'No spending recorded for this month.';
+            target.innerHTML = `<div class="top-categories-empty">${msg}</div>`;
             return;
         }
         // Find the largest total to use as the bar's max-fill reference
@@ -2169,6 +2041,51 @@ async function loadTopCategories() {
     }
 }
 
+// Render top accounts on Home for the displayed month — "how much have I
+// accumulated on each card." Same shape and visual treatment as
+// loadTopCategories (sorted list, proportion bars normalized to the largest
+// entry). Endpoint includes Spending + Bills + Savings and excludes the 'N/A'
+// account (which is the convention for transactions that didn't touch a
+// tracked card / account). When viewing a past month, appends ?month=.
+async function loadTopAccounts() {
+    const target = document.getElementById('topAccountsList');
+    if (!target) return;
+    try {
+        const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-account?limit=5${monthParam}`);
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+            const msg = isDisplayedMonthCurrent()
+                ? 'No account activity recorded this month yet.'
+                : 'No account activity recorded for this month.';
+            target.innerHTML = `<div class="top-categories-empty">${msg}</div>`;
+            return;
+        }
+        const maxTotal = rows.reduce((m, r) => Math.max(m, parseFloat(r.total)), 0);
+        target.innerHTML = rows.map(r => {
+            const total = parseFloat(r.total);
+            const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+            return `
+                <div class="top-cat-item">
+                    <div class="top-cat-row">
+                        <div class="top-cat-name">${escapeHtml(r.account)}</div>
+                        <div class="top-cat-amount">$${total.toFixed(2)}</div>
+                    </div>
+                    <div class="top-cat-bar"><div class="top-cat-bar-fill" style="width: ${pct.toFixed(1)}%"></div></div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load top accounts:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
+// Month-stepper arrow handlers — call stepDisplayedMonth which handles the
+// month change, heading refresh, and re-fetching both Top X cards.
+document.getElementById('monthStepperPrev').addEventListener('click', () => stepDisplayedMonth(-1));
+document.getElementById('monthStepperNext').addEventListener('click', () => stepDisplayedMonth(1));
+
 loadSpendingPower();
 loadRecentTransactions();
 loadCategories();
@@ -2176,10 +2093,31 @@ loadAccounts();
 loadTools();
 loadGoals();
 loadTopCategories();
+loadTopAccounts();
+initLastUsedAccount();
+updateMonthlyHeadings();
+updateMonthStepperUI();
 
 setInterval(() => {
+    // These four are always live, regardless of which month the stepper shows.
     loadSpendingPower();
     loadRecentTransactions();
     loadGoals();
-    loadTopCategories();
+    // The two Top X cards refresh on the live cadence ONLY when viewing the
+    // current month. Auto-refreshing while the user is reading historical
+    // data would either yank the view back to current (annoying) or just be
+    // pointless churn since past months don't change. Same logic for the
+    // heading refresh — wording only needs updating when on the current
+    // month, since that's the only case where a midnight month rollover
+    // changes what the heading should say.
+    if (isDisplayedMonthCurrent()) {
+        loadTopCategories();
+        loadTopAccounts();
+        updateMonthlyHeadings();
+    }
+    // Always refresh the stepper UI: at a midnight month rollover, what was
+    // "current" (and thus had Next disabled) becomes a past month, and the
+    // Next button needs to re-enable so the user can advance to the new
+    // current month. Cheap DOM-only operation; safe to call unconditionally.
+    updateMonthStepperUI();
 }, 30000);

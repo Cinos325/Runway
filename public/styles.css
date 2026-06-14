@@ -392,12 +392,6 @@ body {
     fill: none;
 }
 
-#manageRecurringBtn svg {
-    width: 22px;
-    height: 22px;
-    stroke-width: 1.7;
-}
-
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -1033,6 +1027,25 @@ textarea {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    /* Default top-alignment: inputs sit on the same baseline as long as the
+       labels on both sides have the same height. All current label pairs are
+       short (one or two words) and don't wrap at typical phone widths, so
+       this works without an explicit align-items override. Avoid align-items:
+       end here — it breaks rows where one side has trailing content below
+       the input (e.g. the installment .field-hint), because it would align
+       the other side's input with the hint instead of the input. */
+}
+
+/* When applyPlanTypeToForm() hides one .form-group via inline style (e.g.
+   subscriptions/recurring hide "Number of payments"; subscriptions hide
+   "Type"), the lone visible sibling should fill the whole row instead of
+   sitting at half-width with empty space beside it. The :has() selector
+   detects an inline display:none on a sibling .form-group and spans the
+   visible field across both grid columns. Both directions are covered so
+   it works whether the hidden field is the left or the right child. */
+.form-row-inline > .form-group:not([style*="display: none"]):has(~ .form-group[style*="display: none"]),
+.form-row-inline > .form-group[style*="display: none"] ~ .form-group:not([style*="display: none"]) {
+    grid-column: 1 / -1;
 }
 
 .empty-state {
@@ -1051,12 +1064,27 @@ textarea {
     padding: 24px;
     border-radius: 12px;
     margin-top: 20px;
+    /* Recent (the card directly below on Home) has no top margin of its own,
+       so the gap between Goals and Recent comes from here. Putting the spacing
+       on Goals rather than on Recent means it correctly disappears when Goals
+       is hidden — Recent then has no leading gap. */
+    margin-bottom: 20px;
     box-shadow: var(--shadow-card);
 }
 
 /* Hide whole card when both subsections are empty (toggled by JS) */
 .goals-card.empty {
     display: none;
+}
+
+/* The goals card now sits at the top of Home, but it carries a margin-top
+   intended for when it followed another card. Strip the top margin from
+   whichever card is first inside any tab-pane so the layout looks the same
+   whether Goals is visible or hidden (display:none preserves :first-child
+   matching, so when Goals is hidden, Recent — the next child — falls back
+   on its own natural zero top margin). */
+.tab-pane > :first-child {
+    margin-top: 0;
 }
 
 .goals-card-header {
@@ -1493,31 +1521,6 @@ body {
    "This repeats" section in the Add form (stage 4)
    ============================================ */
 
-/* Divider + toggle row between regular fields and the conditional repeats section */
-.form-repeats-divider {
-    margin-top: 8px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-divider-soft);
-    margin-bottom: 16px;
-}
-
-/* Hidden when its parent (the row) has [hidden]; uses native [hidden] attribute */
-.form-repeats-divider[hidden] {
-    display: none;
-}
-
-/* The collapsible fields section. [hidden] attribute hides cleanly. */
-.repeats-fields {
-    margin-bottom: 16px;
-    padding: 16px;
-    background: var(--bg-button-secondary);
-    border-radius: 8px;
-}
-
-.repeats-fields[hidden] {
-    display: none;
-}
-
 /* Small hint text under inputs (e.g. "auto-filled from payee + frequency") */
 .field-hint {
     font-size: 12px;
@@ -1573,7 +1576,6 @@ body {
     margin-bottom: 0;
 }
 
-/* Recurring list items on the More tab */
 .more-recurring-item {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -1583,8 +1585,22 @@ body {
     align-items: center;
 }
 
-.more-recurring-item:last-child {
-    border-bottom: none;
+.more-recurring-item.inactive .more-recurring-name,
+.more-recurring-item.inactive .more-recurring-meta,
+.more-recurring-item.inactive .more-recurring-amount {
+    opacity: 0.5;
+}
+
+/* Resume button — positive recovery action, visually distinct from Pause */
+.more-recurring-row-actions button.resume {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.more-recurring-row-actions button.resume:hover {
+    background: color-mix(in srgb, var(--success) 88%, black);
+    border-color: color-mix(in srgb, var(--success) 88%, black);
 }
 
 .more-recurring-item.inactive {
@@ -1847,6 +1863,63 @@ input[type="date"] {
    Stage 6: Top categories card on Home
    ============================================ */
 
+/* Month stepper: tiny inline pager above the two Top X cards on Home.
+   Intentionally minimal — just two arrow buttons flanking a month label.
+   No card chrome (background, shadow) so it reads as a navigation control
+   rather than a content card. Margin-top matches the cards below it. */
+.month-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 16px;
+    /* No card chrome — sits visually as a separator/control. */
+}
+
+.month-stepper-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    /* Reserve enough width that swapping month names doesn't shift the arrows.
+       "September" is the longest at 9 chars; a min-width of ~96px holds them
+       steady across the year. */
+    min-width: 96px;
+    text-align: center;
+}
+
+.month-stepper-arrow {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 22px;
+    line-height: 1;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.month-stepper-arrow:hover:not(:disabled),
+.month-stepper-arrow:active:not(:disabled) {
+    background: var(--bg-button-secondary);
+}
+
+.month-stepper-arrow:disabled {
+    color: var(--text-secondary);
+    opacity: 0.4;
+    cursor: default;
+}
+
+/* When the Top categories card sits directly under the stepper, tighten the
+   gap so the stepper reads as a control attached to the cards rather than a
+   detached element with full card-spacing on both sides. */
+.month-stepper + .top-categories-card {
+    margin-top: 8px;
+}
+
 .top-categories-card {
     background: var(--bg-card);
     padding: 20px;
@@ -1932,4 +2005,65 @@ input[type="date"] {
 /* Neutral variant for Transfer (no green or red) */
 .recent-amount.neutral {
     color: var(--text-secondary);
+}
+
+/* ===== Plan type picker (Plan tab) ===== */
+.picker-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.plan-type-picker {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin: 0 0 24px 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-divider-soft);
+}
+
+@media (min-width: 600px) {
+    .plan-type-picker {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.plan-type-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-input);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 60px;
+}
+
+.plan-type-btn:hover {
+    background: var(--bg-button-secondary-hover);
+    border-color: var(--accent);
+}
+
+.plan-type-btn:active {
+    background: var(--bg-button-secondary-active);
+    transform: translateY(1px);
+}
+
+.plan-type-label {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.plan-type-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
 }
