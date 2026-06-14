@@ -1,5 +1,35 @@
+-- Dumped from database version 16.14 (Debian 16.14-1.pgdg13+1)
+-- Dumped by pg_dump version 16.14 (Debian 16.14-1.pgdg13+1)
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
 --
--- Name: generate_recurring_transactions(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: public; Type: SCHEMA; Schema: -; Owner: finance
+--
+
+-- *not* creating schema, since initdb creates it
+
+
+ALTER SCHEMA public OWNER TO finance;
+
+--
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: finance
+--
+
+COMMENT ON SCHEMA public IS '';
+
+
+--
+-- Name: generate_recurring_transactions(); Type: FUNCTION; Schema: public; Owner: finance
 --
 
 CREATE FUNCTION public.generate_recurring_transactions() RETURNS TABLE(transactions_created integer, details text)
@@ -57,7 +87,8 @@ BEGIN
         category,
         amount,
         account,
-        description
+        description,
+		recurring_id
       ) VALUES (
         new_transaction_date,
         current_month_date,
@@ -69,7 +100,8 @@ BEGIN
         COALESCE(rec.description, '')
           || ' (auto-generated from: '
           || rec.name
-          || ')'
+          || ')',
+		rec.id
       );
 
       -- Mark as generated for this month
@@ -91,8 +123,10 @@ END;
 $$;
 
 
+ALTER FUNCTION public.generate_recurring_transactions() OWNER TO finance;
+
 --
--- Name: initialize_current_month_checklist(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: initialize_current_month_checklist(); Type: FUNCTION; Schema: public; Owner: finance
 --
 
 CREATE FUNCTION public.initialize_current_month_checklist() RETURNS void
@@ -158,8 +192,10 @@ END;
 $$;
 
 
+ALTER FUNCTION public.initialize_current_month_checklist() OWNER TO finance;
+
 --
--- Name: run_monthly_rollover(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: run_monthly_rollover(); Type: FUNCTION; Schema: public; Owner: finance
 --
 
 CREATE FUNCTION public.run_monthly_rollover() RETURNS void
@@ -204,8 +240,10 @@ END;
 $$;
 
 
+ALTER FUNCTION public.run_monthly_rollover() OWNER TO finance;
+
 --
--- Name: set_payment_defaults(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: set_payment_defaults(); Type: FUNCTION; Schema: public; Owner: finance
 --
 
 CREATE FUNCTION public.set_payment_defaults() RETURNS trigger
@@ -230,12 +268,14 @@ END;
 $$;
 
 
+ALTER FUNCTION public.set_payment_defaults() OWNER TO finance;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: transactions; Type: TABLE; Schema: public; Owner: -
+-- Name: transactions; Type: TABLE; Schema: public; Owner: finance
 --
 
 CREATE TABLE public.transactions (
@@ -249,12 +289,15 @@ CREATE TABLE public.transactions (
     account text DEFAULT 'Paypal'::text,
     created_at timestamp without time zone DEFAULT now() NOT NULL,
     description text,
+    recurring_id integer,
     CONSTRAINT transactions_type_check CHECK ((type = ANY (ARRAY['Income'::text, 'Spending'::text, 'Transfer'::text, 'Savings'::text, 'Bills'::text])))
 );
 
 
+ALTER TABLE public.transactions OWNER TO finance;
+
 --
--- Name: active_subscriptions; Type: VIEW; Schema: public; Owner: -
+-- Name: active_subscriptions; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.active_subscriptions AS
@@ -271,8 +314,10 @@ CREATE VIEW public.active_subscriptions AS
   ORDER BY (max(transaction_date)) DESC;
 
 
+ALTER VIEW public.active_subscriptions OWNER TO finance;
+
 --
--- Name: bills_paid_by_category; Type: VIEW; Schema: public; Owner: -
+-- Name: bills_paid_by_category; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.bills_paid_by_category AS
@@ -288,8 +333,10 @@ CREATE VIEW public.bills_paid_by_category AS
   ORDER BY (sum(amount)) DESC;
 
 
+ALTER VIEW public.bills_paid_by_category OWNER TO finance;
+
 --
--- Name: budget_config; Type: TABLE; Schema: public; Owner: -
+-- Name: budget_config; Type: TABLE; Schema: public; Owner: finance
 --
 
 CREATE TABLE public.budget_config (
@@ -299,15 +346,17 @@ CREATE TABLE public.budget_config (
 );
 
 
+ALTER TABLE public.budget_config OWNER TO finance;
+
 --
--- Name: TABLE budget_config; Type: COMMENT; Schema: public; Owner: -
+-- Name: TABLE budget_config; Type: COMMENT; Schema: public; Owner: finance
 --
 
 COMMENT ON TABLE public.budget_config IS 'Stores monthly budget configuration - currently just baseline cash amount';
 
 
 --
--- Name: budget_config_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: budget_config_id_seq; Type: SEQUENCE; Schema: public; Owner: finance
 --
 
 CREATE SEQUENCE public.budget_config_id_seq
@@ -319,15 +368,17 @@ CREATE SEQUENCE public.budget_config_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.budget_config_id_seq OWNER TO finance;
+
 --
--- Name: budget_config_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: budget_config_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: finance
 --
 
 ALTER SEQUENCE public.budget_config_id_seq OWNED BY public.budget_config.id;
 
 
 --
--- Name: category_spending_with_top_items; Type: VIEW; Schema: public; Owner: -
+-- Name: category_spending_with_top_items; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.category_spending_with_top_items AS
@@ -347,8 +398,10 @@ CREATE VIEW public.category_spending_with_top_items AS
   ORDER BY (sum(amount)) DESC;
 
 
+ALTER VIEW public.category_spending_with_top_items OWNER TO finance;
+
 --
--- Name: payment_checklist; Type: TABLE; Schema: public; Owner: -
+-- Name: payment_checklist; Type: TABLE; Schema: public; Owner: finance
 --
 
 CREATE TABLE public.payment_checklist (
@@ -369,8 +422,10 @@ CREATE TABLE public.payment_checklist (
 );
 
 
+ALTER TABLE public.payment_checklist OWNER TO finance;
+
 --
--- Name: current_month_payment_checklist; Type: VIEW; Schema: public; Owner: -
+-- Name: current_month_payment_checklist; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.current_month_payment_checklist AS
@@ -405,8 +460,10 @@ CREATE VIEW public.current_month_payment_checklist AS
         END, priority, due_date;
 
 
+ALTER VIEW public.current_month_payment_checklist OWNER TO finance;
+
 --
--- Name: income_summary; Type: VIEW; Schema: public; Owner: -
+-- Name: income_summary; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.income_summary AS
@@ -439,8 +496,10 @@ UNION ALL
           GROUP BY transactions.month) monthly_totals;
 
 
+ALTER VIEW public.income_summary OWNER TO finance;
+
 --
--- Name: recurring_transactions; Type: TABLE; Schema: public; Owner: -
+-- Name: recurring_transactions; Type: TABLE; Schema: public; Owner: finance
 --
 
 CREATE TABLE public.recurring_transactions (
@@ -465,8 +524,10 @@ CREATE TABLE public.recurring_transactions (
 );
 
 
+ALTER TABLE public.recurring_transactions OWNER TO finance;
+
 --
--- Name: installment_progress; Type: VIEW; Schema: public; Owner: -
+-- Name: installment_progress; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.installment_progress AS
@@ -489,13 +550,13 @@ CREATE VIEW public.installment_progress AS
                     ELSE NULL::integer
                 END AS total_periods
            FROM public.recurring_transactions
-          WHERE ((recurring_transactions.is_active = true) AND (recurring_transactions.type = 'Spending'::text) AND (recurring_transactions.end_date IS NOT NULL))
+          WHERE ((recurring_transactions.is_active = true) AND (recurring_transactions.type = 'Bills'::text) AND (recurring_transactions.end_date IS NOT NULL))
         ), matched AS (
          SELECT i_1.id AS installment_id,
             COALESCE(sum(t.amount), (0)::numeric) AS amount_paid,
             count(t.id) AS payments_made
            FROM (installments i_1
-             LEFT JOIN public.transactions t ON (((t.payee = i_1.payee) AND (t.category = i_1.category) AND (t.amount = i_1.payment_amount) AND ((t.transaction_date >= i_1.start_date) AND (t.transaction_date <= i_1.end_date)) AND (t.type = 'Spending'::text))))
+             LEFT JOIN public.transactions t ON (((t.payee = i_1.payee) AND (t.category = i_1.category) AND (t.amount = i_1.payment_amount) AND ((t.transaction_date >= i_1.start_date) AND (t.transaction_date <= i_1.end_date)) AND (t.type = 'Bills'::text))))
           GROUP BY i_1.id
         )
  SELECT i.id,
@@ -522,8 +583,10 @@ CREATE VIEW public.installment_progress AS
   ORDER BY i.end_date;
 
 
+ALTER VIEW public.installment_progress OWNER TO finance;
+
 --
--- Name: monthly_totals; Type: VIEW; Schema: public; Owner: -
+-- Name: monthly_totals; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.monthly_totals AS
@@ -553,8 +616,10 @@ CREATE VIEW public.monthly_totals AS
   ORDER BY month DESC;
 
 
+ALTER VIEW public.monthly_totals OWNER TO finance;
+
 --
--- Name: payment_checklist_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: payment_checklist_id_seq; Type: SEQUENCE; Schema: public; Owner: finance
 --
 
 CREATE SEQUENCE public.payment_checklist_id_seq
@@ -566,15 +631,17 @@ CREATE SEQUENCE public.payment_checklist_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.payment_checklist_id_seq OWNER TO finance;
+
 --
--- Name: payment_checklist_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: payment_checklist_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: finance
 --
 
 ALTER SEQUENCE public.payment_checklist_id_seq OWNED BY public.payment_checklist.id;
 
 
 --
--- Name: recurring_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: recurring_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: finance
 --
 
 CREATE SEQUENCE public.recurring_transactions_id_seq
@@ -586,15 +653,17 @@ CREATE SEQUENCE public.recurring_transactions_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.recurring_transactions_id_seq OWNER TO finance;
+
 --
--- Name: recurring_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: recurring_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: finance
 --
 
 ALTER SEQUENCE public.recurring_transactions_id_seq OWNED BY public.recurring_transactions.id;
 
 
 --
--- Name: savings_goal_progress; Type: VIEW; Schema: public; Owner: -
+-- Name: savings_goal_progress; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.savings_goal_progress AS
@@ -612,8 +681,10 @@ SELECT
     NULL::bigint AS contribution_count;
 
 
+ALTER VIEW public.savings_goal_progress OWNER TO finance;
+
 --
--- Name: savings_goals; Type: TABLE; Schema: public; Owner: -
+-- Name: savings_goals; Type: TABLE; Schema: public; Owner: finance
 --
 
 CREATE TABLE public.savings_goals (
@@ -630,8 +701,10 @@ CREATE TABLE public.savings_goals (
 );
 
 
+ALTER TABLE public.savings_goals OWNER TO finance;
+
 --
--- Name: savings_goals_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: savings_goals_id_seq; Type: SEQUENCE; Schema: public; Owner: finance
 --
 
 CREATE SEQUENCE public.savings_goals_id_seq
@@ -643,15 +716,17 @@ CREATE SEQUENCE public.savings_goals_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.savings_goals_id_seq OWNER TO finance;
+
 --
--- Name: savings_goals_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: savings_goals_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: finance
 --
 
 ALTER SEQUENCE public.savings_goals_id_seq OWNED BY public.savings_goals.id;
 
 
 --
--- Name: savings_plan_progress; Type: VIEW; Schema: public; Owner: -
+-- Name: savings_plan_progress; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.savings_plan_progress AS
@@ -705,8 +780,10 @@ CREATE VIEW public.savings_plan_progress AS
   ORDER BY p.end_date;
 
 
+ALTER VIEW public.savings_plan_progress OWNER TO finance;
+
 --
--- Name: spending_by_category_total; Type: VIEW; Schema: public; Owner: -
+-- Name: spending_by_category_total; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.spending_by_category_total AS
@@ -722,19 +799,22 @@ CREATE VIEW public.spending_by_category_total AS
   ORDER BY (sum(amount)) DESC;
 
 
+ALTER VIEW public.spending_by_category_total OWNER TO finance;
+
 --
--- Name: spending_power; Type: VIEW; Schema: public; Owner: -
+-- Name: spending_power; Type: VIEW; Schema: public; Owner: finance
 --
 
 CREATE VIEW public.spending_power AS
  SELECT (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date AS current_month,
-    ((((COALESCE(bc.baseline, (0)::numeric) + COALESCE(income.total, (0)::numeric)) + COALESCE(releases.total, (0)::numeric)) - COALESCE(planned.total, (0)::numeric)) - COALESCE(spending.total, (0)::numeric)) AS spending_power,
+    (((((COALESCE(bc.baseline, (0)::numeric) + COALESCE(income.total, (0)::numeric)) + COALESCE(releases.total, (0)::numeric)) - COALESCE(planned.total, (0)::numeric)) - COALESCE(spending.total, (0)::numeric)) - COALESCE(adhoc.total, (0)::numeric)) AS spending_power,
     COALESCE(bc.baseline, (0)::numeric) AS baseline,
     COALESCE(income.total, (0)::numeric) AS current_month_income,
     COALESCE(planned.total, (0)::numeric) AS planned_payments_total,
     COALESCE(spending.total, (0)::numeric) AS current_month_spending,
-    COALESCE(releases.total, (0)::numeric) AS current_month_goal_releases
-   FROM ((((public.budget_config bc
+    COALESCE(releases.total, (0)::numeric) AS current_month_goal_releases,
+    COALESCE(adhoc.total, (0)::numeric) AS current_month_adhoc_obligations
+   FROM (((((public.budget_config bc
      CROSS JOIN ( SELECT COALESCE(sum(transactions.amount), (0)::numeric) AS total
            FROM public.transactions
           WHERE ((transactions.month = (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date) AND (transactions.type = 'Income'::text))) income)
@@ -746,11 +826,16 @@ CREATE VIEW public.spending_power AS
           WHERE ((recurring_transactions.is_active = true) AND (recurring_transactions.type <> 'Spending'::text) AND (recurring_transactions.start_date < ((date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)) + '1 mon'::interval))::date) AND ((recurring_transactions.end_date IS NULL) OR (recurring_transactions.end_date >= (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date)))) planned)
      CROSS JOIN ( SELECT COALESCE(sum(transactions.amount), (0)::numeric) AS total
            FROM public.transactions
-          WHERE ((transactions.month = (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date) AND (transactions.type = 'Spending'::text))) spending);
+          WHERE ((transactions.month = (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date) AND (transactions.type = 'Spending'::text))) spending)
+     CROSS JOIN ( SELECT COALESCE(sum(transactions.amount), (0)::numeric) AS total
+           FROM public.transactions
+          WHERE ((transactions.month = (date_trunc('month'::text, (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'::text)))::date) AND (transactions.type = ANY (ARRAY['Bills'::text, 'Savings'::text])) AND (transactions.recurring_id IS NULL))) adhoc);
 
+
+ALTER VIEW public.spending_power OWNER TO finance;
 
 --
--- Name: transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: finance
 --
 
 CREATE SEQUENCE public.transactions_id_seq
@@ -762,50 +847,87 @@ CREATE SEQUENCE public.transactions_id_seq
     CACHE 1;
 
 
+ALTER SEQUENCE public.transactions_id_seq OWNER TO finance;
+
 --
--- Name: transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: finance
 --
 
 ALTER SEQUENCE public.transactions_id_seq OWNED BY public.transactions.id;
 
 
 --
--- Name: budget_config id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: budget_config id; Type: DEFAULT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.budget_config ALTER COLUMN id SET DEFAULT nextval('public.budget_config_id_seq'::regclass);
 
 
 --
--- Name: payment_checklist id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: payment_checklist id; Type: DEFAULT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.payment_checklist ALTER COLUMN id SET DEFAULT nextval('public.payment_checklist_id_seq'::regclass);
 
 
 --
--- Name: recurring_transactions id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: recurring_transactions id; Type: DEFAULT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.recurring_transactions ALTER COLUMN id SET DEFAULT nextval('public.recurring_transactions_id_seq'::regclass);
 
 
 --
--- Name: savings_goals id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: savings_goals id; Type: DEFAULT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.savings_goals ALTER COLUMN id SET DEFAULT nextval('public.savings_goals_id_seq'::regclass);
 
 
 --
--- Name: transactions id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: transactions id; Type: DEFAULT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.transactions ALTER COLUMN id SET DEFAULT nextval('public.transactions_id_seq'::regclass);
 
 
 --
--- Name: budget_config budget_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: budget_config_id_seq; Type: SEQUENCE SET; Schema: public; Owner: finance
+--
+
+SELECT pg_catalog.setval('public.budget_config_id_seq', 7, true);
+
+
+--
+-- Name: payment_checklist_id_seq; Type: SEQUENCE SET; Schema: public; Owner: finance
+--
+
+SELECT pg_catalog.setval('public.payment_checklist_id_seq', 122, true);
+
+
+--
+-- Name: recurring_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: finance
+--
+
+SELECT pg_catalog.setval('public.recurring_transactions_id_seq', 31, true);
+
+
+--
+-- Name: savings_goals_id_seq; Type: SEQUENCE SET; Schema: public; Owner: finance
+--
+
+SELECT pg_catalog.setval('public.savings_goals_id_seq', 6, true);
+
+
+--
+-- Name: transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: finance
+--
+
+SELECT pg_catalog.setval('public.transactions_id_seq', 14905, true);
+
+
+--
+-- Name: budget_config budget_config_pkey; Type: CONSTRAINT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.budget_config
@@ -813,7 +935,7 @@ ALTER TABLE ONLY public.budget_config
 
 
 --
--- Name: payment_checklist payment_checklist_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: payment_checklist payment_checklist_pkey; Type: CONSTRAINT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.payment_checklist
@@ -821,7 +943,7 @@ ALTER TABLE ONLY public.payment_checklist
 
 
 --
--- Name: recurring_transactions recurring_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: recurring_transactions recurring_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.recurring_transactions
@@ -829,7 +951,7 @@ ALTER TABLE ONLY public.recurring_transactions
 
 
 --
--- Name: savings_goals savings_goals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: savings_goals savings_goals_pkey; Type: CONSTRAINT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.savings_goals
@@ -837,7 +959,7 @@ ALTER TABLE ONLY public.savings_goals
 
 
 --
--- Name: transactions transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: transactions transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: finance
 --
 
 ALTER TABLE ONLY public.transactions
@@ -845,84 +967,91 @@ ALTER TABLE ONLY public.transactions
 
 
 --
--- Name: idx_payment_checklist_month; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_payment_checklist_month; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_payment_checklist_month ON public.payment_checklist USING btree (month);
 
 
 --
--- Name: idx_recurring_active; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_recurring_active; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_recurring_active ON public.recurring_transactions USING btree (is_active, last_generated);
 
 
 --
--- Name: idx_savings_goals_match_category; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_savings_goals_match_category; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_savings_goals_match_category ON public.savings_goals USING btree (match_category) WHERE (is_active = true);
 
 
 --
--- Name: idx_transactions_account; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_account; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_account ON public.transactions USING btree (account);
 
 
 --
--- Name: idx_transactions_category; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_category; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_category ON public.transactions USING btree (category);
 
 
 --
--- Name: idx_transactions_created_at_desc; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_created_at_desc; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_created_at_desc ON public.transactions USING btree (created_at DESC);
 
 
 --
--- Name: idx_transactions_date; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_date; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_date ON public.transactions USING btree (transaction_date);
 
 
 --
--- Name: idx_transactions_month; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_month; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_month ON public.transactions USING btree (month);
 
 
 --
--- Name: idx_transactions_type; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_transactions_recurring_id; Type: INDEX; Schema: public; Owner: finance
+--
+
+CREATE INDEX idx_transactions_recurring_id ON public.transactions USING btree (recurring_id);
+
+
+--
+-- Name: idx_transactions_type; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE INDEX idx_transactions_type ON public.transactions USING btree (type);
 
 
 --
--- Name: payment_checklist_unique_month_item; Type: INDEX; Schema: public; Owner: -
+-- Name: payment_checklist_unique_month_item; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE UNIQUE INDEX payment_checklist_unique_month_item ON public.payment_checklist USING btree (month, item_name);
 
 
 --
--- Name: transactions_unique_auto_generated; Type: INDEX; Schema: public; Owner: -
+-- Name: transactions_unique_auto_generated; Type: INDEX; Schema: public; Owner: finance
 --
 
 CREATE UNIQUE INDEX transactions_unique_auto_generated ON public.transactions USING btree (month, payee, amount, account) WHERE (description ~~ '%auto-generated%'::text);
 
 
 --
--- Name: savings_goal_progress _RETURN; Type: RULE; Schema: public; Owner: -
+-- Name: savings_goal_progress _RETURN; Type: RULE; Schema: public; Owner: finance
 --
 
 CREATE OR REPLACE VIEW public.savings_goal_progress AS
@@ -948,8 +1077,30 @@ CREATE OR REPLACE VIEW public.savings_goal_progress AS
 
 
 --
--- Name: payment_checklist auto_set_payment_defaults; Type: TRIGGER; Schema: public; Owner: -
+-- Name: payment_checklist auto_set_payment_defaults; Type: TRIGGER; Schema: public; Owner: finance
 --
 
 CREATE TRIGGER auto_set_payment_defaults BEFORE UPDATE ON public.payment_checklist FOR EACH ROW EXECUTE FUNCTION public.set_payment_defaults();
+
+
+--
+-- Name: transactions transactions_recurring_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: finance
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_recurring_id_fkey FOREIGN KEY (recurring_id) REFERENCES public.recurring_transactions(id) ON DELETE SET NULL;
+
+
+--
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: finance
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict ghDfusSxrWWBPjdpi1623XaNBBaTqXFtfkOOKSeDj3Bafli2fjgPYbmrXn9ZbPY
 
