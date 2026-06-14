@@ -4,9 +4,9 @@ A self-hosted personal finance tracker I built to replace a Google Sheet I'd bee
 
 The goal was a system where entering a transaction takes one tap, the math behind "how much can I still spend this month" is verifiable instead of being a fragile spreadsheet formula, and the data lives somewhere I can query directly.
 
-> Built by **<your-first-name>** — currently looking for early-career DevOps / platform roles.
+> Built by **Thomas Morgan** — currently looking for data engineering and systems analyst roles.
 
-![Screenshot of the finance app showing the spending power amount, a circular pace indicator, and a transaction entry form](docs/screenshot.png)
+![Screenshot of the finance app showing the spending power amount, the runway header, and a transaction entry form](docs/screenshot.png)
 
 ---
 
@@ -15,7 +15,7 @@ The goal was a system where entering a transaction takes one tap, the math behin
 - **Track spending power** — a single number representing "money still available this month" that automatically reflects every new transaction, computed by a Postgres view
 - **One-tap transaction entry** — pick a type, enter the amount, fill in category/payee, submit
 - **Recurring transactions** — bills, subscriptions, savings contributions, and income, with optional installment-plan support for splitting one-time purchases
-- **Pace tracking** — a circular indicator showing whether you're on pace, ahead, or behind for the month
+- **Runway visualizer** — a bar indicator showing average daily spending and projected runway
 - **Mobile-first** — installed as an iOS PWA, works offline-from-cellular at home, swipe-to-edit/delete
 
 ## Stack
@@ -103,9 +103,9 @@ The fix was a nullable `recurring_id` foreign key on `transactions`, pointing ba
 
 The total fix is two columns of new SQL and one new join in the view, but it eliminated a whole class of "why is my spending power wrong" friction.
 
-### A pace ring that makes the abstract concrete
+### 5 days of runway remaining!
 
-The spending power number alone tells you "how much" but not "are you on track?" A small circular indicator in the header solves this: a ring filled with your remaining-fraction-of-available, with a tick mark showing where a linear-pace burn-down would put you on this day of the month. Color shifts from green (ahead) through blue (on pace) to amber and red as overspending accelerates.
+The spending power number alone tells you "how much" but not "are you on track?" A small aesthetically-fitting bar in the header solves this: a bar that projects how many days your current spending habits can last - your runway. This area reports to the user their current average spending per day, how many days this average can sustain them for, and how many days short of month-end at their current pace.
 
 The math is intentionally simple — no exponential weighting, no historical comparisons — because the goal is "glance and know," not "predict the future."
 
@@ -253,4 +253,4 @@ The project doubles as my main DevOps learning ground. Multi-container orchestra
 
 ## Contact
 
-Questions, feedback, or interested in chatting: [your-email or LinkedIn URL]
+Questions, feedback, or interested in chatting: https://www.linkedin.com/in/james-morgan-20097b208/
