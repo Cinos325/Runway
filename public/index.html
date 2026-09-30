@@ -285,9 +285,10 @@
         
         <!-- ====== MORE TAB ====== -->
         <div class="tab-pane" id="moreTab" data-tab="more">
-            <!-- Sub-tab selector: two sections inside More (Recurring moved to Plan tab in stage 2) -->
+            <!-- Sub-tab selector: three sections inside More (Recurring moved to Plan tab in stage 2) -->
             <div class="sub-tabs" role="tablist" aria-label="More sections">
                 <button type="button" class="sub-tab active" data-subtab="history" role="tab" aria-selected="true">History</button>
+                <button type="button" class="sub-tab" data-subtab="cards" role="tab" aria-selected="false">Cards</button>
                 <button type="button" class="sub-tab" data-subtab="settings" role="tab" aria-selected="false">Settings</button>
             </div>
             
@@ -313,6 +314,25 @@
                         </div>
                     </div>
                     <div id="moreTransactionsList">
+                        <div class="empty-state">Loading…</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cards sub-tab -->
+            <div class="sub-tab-pane" id="subCards" data-subtab="cards" role="tabpanel" hidden>
+                <div class="more-card">
+                    <div class="card-header-row">
+                        <h2 class="card-heading">Credit cards</h2>
+                        <button type="button" class="card-action-link" id="addCardBtn">+ Add card</button>
+                    </div>
+                    <div class="cc-overview" id="creditCardsOverview" hidden>
+                        <div class="cc-overview-grid" id="creditCardsOverviewGrid"></div>
+                        <div class="cc-overview-util-bar">
+                            <div class="cc-overview-util-fill" id="creditCardsOverviewUtilFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div id="creditCardsList">
                         <div class="empty-state">Loading…</div>
                     </div>
                 </div>
@@ -428,6 +448,150 @@
         </div>
     </div>
     
+    <!-- Credit card create/edit modal -->
+    <div class="modal-overlay" id="cardModal">
+        <div class="modal">
+            <h2 id="cardModalTitle">New credit card</h2>
+            <p class="modal-subtitle">Account name must match what you use in the "account" field on transactions for this card, so activity links up correctly.</p>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Account name</label>
+                    <input type="text" id="cardAccountName" placeholder="Chase Sapphire">
+                </div>
+                <div class="form-group">
+                    <label>Issuer</label>
+                    <input type="text" id="cardIssuer" placeholder="Chase">
+                </div>
+            </div>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Last four</label>
+                    <input type="text" id="cardLastFour" maxlength="4" placeholder="1234">
+                </div>
+                <div class="form-group">
+                    <label>Credit limit</label>
+                    <input type="number" id="cardLimit" step="0.01" placeholder="5000.00">
+                </div>
+            </div>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Statement day</label>
+                    <input type="number" id="cardStatementDay" min="1" max="31" placeholder="15">
+                </div>
+                <div class="form-group">
+                    <label>Due day</label>
+                    <input type="number" id="cardDueDay" min="1" max="31" placeholder="10">
+                </div>
+            </div>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>APR (%)</label>
+                    <input type="number" id="cardApr" step="0.01" placeholder="24.99">
+                </div>
+                <div class="form-group">
+                    <label>Annual fee</label>
+                    <input type="number" id="cardAnnualFee" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Card opened</label>
+                    <input type="date" id="cardOpenedDate">
+                </div>
+                <div class="form-group">
+                    <label>Reward type</label>
+                    <select id="cardRewardType">
+                        <option value="cashback">Cashback</option>
+                        <option value="points">Points</option>
+                        <option value="miles">Miles</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Opening balance ledger seed. See modal subtitle for opened_date;
+                 this pair seeds the running-balance calculation so utilization
+                 is accurate even for cards you're mid-cycle on when you add them. -->
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Current balance owed</label>
+                    <input type="number" id="cardOpeningBalance" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Balance as of</label>
+                    <input type="date" id="cardBalanceAsOf">
+                </div>
+            </div>
+            <p class="modal-subtitle" style="margin-top: -8px;">Enter what you currently owe on this card and today's date. From then on, new charges and logged payments keep the balance accurate automatically.</p>
+
+            <div class="form-group">
+                <label>Reward rates by category</label>
+                <div class="reward-rates-list" id="cardRewardRatesList"></div>
+                <div class="form-row-inline reward-rate-add-row">
+                    <input type="text" id="cardRewardCategoryInput" placeholder="dining">
+                    <input type="number" id="cardRewardRateInput" step="0.01" placeholder="3" style="max-width: 90px;">
+                    <button type="button" class="modal-btn-cancel" id="cardRewardRateAddBtn">Add</button>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Notes (optional)</label>
+                <textarea id="cardNotes" placeholder="Anything else worth remembering about this card"></textarea>
+            </div>
+
+            <div class="modal-buttons" id="cardModalButtons">
+                <button type="button" class="modal-btn-cancel" id="cardCancelBtn">Cancel</button>
+                <button type="button" class="modal-btn-save" id="cardSaveBtn">Save</button>
+            </div>
+
+            <div class="modal-buttons" id="cardEditButtons" style="display: none; margin-top: 8px;">
+                <button type="button" class="modal-btn-cancel danger" id="cardDeleteBtn">Delete</button>
+                <button type="button" class="modal-btn-cancel" id="cardLogPaymentBtn">Log a payment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log a credit card payment modal -->
+    <div class="modal-overlay" id="cardPaymentModal">
+        <div class="modal">
+            <h2>Log a payment</h2>
+            <p class="modal-subtitle" id="cardPaymentSubtitle">Record a payment made toward this card. This reduces its tracked balance going forward.</p>
+
+            <div class="form-row-inline">
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" id="cardPaymentAmount" step="0.01" placeholder="200.00">
+                </div>
+                <div class="form-group">
+                    <label>Payment date</label>
+                    <input type="date" id="cardPaymentDate">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Paid from (optional)</label>
+                <input type="text" id="cardPaymentSource" placeholder="Truist checking">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Notes (optional)</label>
+                <textarea id="cardPaymentNotes" placeholder="Statement payoff, partial payment, etc."></textarea>
+            </div>
+
+            <div class="modal-buttons">
+                <button type="button" class="modal-btn-cancel" id="cardPaymentCancelBtn">Cancel</button>
+                <button type="button" class="modal-btn-save" id="cardPaymentSaveBtn">Save payment</button>
+            </div>
+
+            <!-- Recent payment history for this card -->
+            <div id="cardPaymentHistory" style="margin-top: 16px;"></div>
+        </div>
+    </div>
+
     <!-- Update baseline modal -->
     <div class="modal-overlay" id="baselineModal">
         <div class="modal">

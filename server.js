@@ -837,6 +837,293 @@ app.get('/api/tools', (req, res) => {
   res.json(CONFIGURED_TOOLS);
 });
 
+// ===== Credit cards =====
+
+function validateCardInput(body) {
+  const errors = [];
+  if (!body.account_name || !String(body.account_name).trim()) {
+    errors.push('account_name is required');
+  }
+  if (body.credit_limit !== undefined && body.credit_limit !== null && body.credit_limit !== '') {
+    const lim = parseFloat(body.credit_limit);
+    if (isNaN(lim) || lim < 0) errors.push('credit_limit must be a non-negative number');
+  }
+  if (body.statement_day !== undefined && body.statement_day !== null && body.statement_day !== '') {
+    const d = parseInt(body.statement_day, 10);
+    if (isNaN(d) || d < 1 || d > 31) errors.push('statement_day must be between 1 and 31');
+  }
+  if (body.due_day !== undefined && body.due_day !== null && body.due_day !== '') {
+    const d = parseInt(body.due_day, 10);
+    if (isNaN(d) || d < 1 || d > 31) errors.push('due_day must be between 1 and 31');
+  }
+  if (body.reward_type && !['cashback', 'points', 'miles'].includes(body.reward_type)) {
+    errors.push('reward_type must be cashback, points, or miles');
+  }
+  return errors;
+}
+
+// Returns the next occurrence of a given day-of-month from today, plus
+// whether it's overdue/due-soon. Computed in JS rather than SQL — date-math
+// for "next occurrence of day-of-month" is much less error-prone here.
+function nextOccurrence(dayOfMonth) {
+  if (!dayOfMonth) return null;
+  const now = new Date();
+  const clampDay = (year, month, day) => {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return Math.min(day, lastDay);
+  };
+  let year = now.getFullYear();
+  let month = now.getMonth();
+  let day = clampDay(year, month, dayOfMonth);
+  let candidate = new Date(year, month, day);
+  candidate.setHours(0, 0, 0, 0);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (candidate < today) {
+    month += 1;
+    if (month > 11) { month = 0; year += 1; }
+    day = clampDay(year, month, dayOfMonth);
+    candidate = new Date(year, month, day);
+  }
+  const daysUntil = Math.round((candidate - today) / 86400000);
+  return { date: candidate.toISOString().slice(0, 10), days_until: daysUntil };
+}
+
+// List all cards with computed summary fields (balance, utilization, due date, age)
+app.get('/api/credit-cards', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM credit_card_summary');
+    const cards = result.rows.map(c => {
+      const due = nextOccurrence(c.due_day);
+      return {
+        ...c,
+        age_years: c.opened_date
+          ? Math.floor((Date.now() - new Date(c.opened_date).getTime()) / 86400000 / 365.25 * 10) / 10
+          : null,
+        next_due_date: due ? due.date : null,
+        days_until_due: due ? due.days_until : null,
+      };
+    });
+    res.json(cards);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Get a single card by id (for pre-filling the edit form)
+app.get('/api/credit-cards/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const result = await pool.query('SELECT * FROM credit_cards WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/credit-cards', async (req, res) => {
+  const errors = validateCardInput(req.body);
+  if (errors.length > 0) return res.status(400).json({ error: 'Validation failed', details: errors });
+
+  const {
+    account_name, issuer, last_four, credit_limit, statement_day, due_day,
+    apr, annual_fee, opened_date, reward_type, reward_rates, notes,
+    opening_balance, balance_as_of,
+  } = req.body;
+
+  try {
+    const result = await pool.query(`
+      INSERT INTO credit_cards (
+        account_name, issuer, last_four, credit_limit, statement_day, due_day,
+        apr, annual_fee, opened_date, reward_type, reward_rates, notes,
+        opening_balance, balance_as_of
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      RETURNING *
+    `, [
+      account_name.trim(),
+      issuer || null,
+      last_four || null,
+      credit_limit || null,
+      statement_day || null,
+      due_day || null,
+      apr || null,
+      annual_fee || 0,
+      opened_date || null,
+      reward_type || 'cashback',
+      JSON.stringify(reward_rates || {}),
+      notes || null,
+      opening_balance || 0,
+      balance_as_of || new Date().toISOString().slice(0, 10),
+    ]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'A card with this account name already exists' });
+    }
+    res.status(500).json({ error: 'Failed to create card' });
+  }
+});
+
+app.put('/api/credit-cards/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const errors = validateCardInput(req.body);
+  if (errors.length > 0) return res.status(400).json({ error: 'Validation failed', details: errors });
+
+  const {
+    account_name, issuer, last_four, credit_limit, statement_day, due_day,
+    apr, annual_fee, opened_date, reward_type, reward_rates, notes, is_active,
+    opening_balance, balance_as_of,
+  } = req.body;
+
+  try {
+    const result = await pool.query(`
+      UPDATE credit_cards SET
+        account_name = $1, issuer = $2, last_four = $3, credit_limit = $4,
+        statement_day = $5, due_day = $6, apr = $7, annual_fee = $8,
+        opened_date = $9, reward_type = $10, reward_rates = $11, notes = $12,
+        is_active = $13, opening_balance = $14, balance_as_of = $15
+      WHERE id = $16
+      RETURNING *
+    `, [
+      account_name.trim(),
+      issuer || null,
+      last_four || null,
+      credit_limit || null,
+      statement_day || null,
+      due_day || null,
+      apr || null,
+      annual_fee || 0,
+      opened_date || null,
+      reward_type || 'cashback',
+      JSON.stringify(reward_rates || {}),
+      notes || null,
+      is_active !== false,
+      opening_balance || 0,
+      balance_as_of || new Date().toISOString().slice(0, 10),
+      id,
+    ]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'A card with this account name already exists' });
+    }
+    res.status(500).json({ error: 'Failed to update card' });
+  }
+});
+
+app.delete('/api/credit-cards/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const result = await pool.query('DELETE FROM credit_cards WHERE id = $1 RETURNING id', [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: result.rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete card' });
+  }
+});
+
+// Given a spending category, returns the active card with the best reward
+// rate for it (falling back to each card's "default" rate if the category
+// isn't listed explicitly).
+app.get('/api/credit-cards/best-category/:category', async (req, res) => {
+  try {
+    const category = req.params.category;
+    const result = await pool.query(`
+      SELECT id, account_name, issuer, reward_type, reward_rates
+      FROM credit_cards
+      WHERE is_active = true
+    `);
+    let best = null;
+    for (const card of result.rows) {
+      const rates = card.reward_rates || {};
+      const rate = rates[category] !== undefined ? rates[category] : rates['default'];
+      if (rate === undefined) continue;
+      if (best === null || rate > best.rate) {
+        best = { card_id: card.id, account_name: card.account_name, issuer: card.issuer, reward_type: card.reward_type, rate };
+      }
+    }
+    res.json(best || {});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// ===== Credit card payments =====
+// A logged payment reduces a card's running balance from that point forward
+// (see credit_card_summary). This is how "how much did I pay off each month"
+// gets tracked, separate from the free-text `transactions` table.
+
+app.get('/api/credit-cards/:id/payments', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit < 1) limit = 12;
+    if (limit > 100) limit = 100;
+    const result = await pool.query(`
+      SELECT id, payment_date, amount, source_account, notes, created_at
+      FROM credit_card_payments
+      WHERE credit_card_id = $1
+      ORDER BY payment_date DESC, id DESC
+      LIMIT $2
+    `, [id, limit]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/credit-cards/:id/payments', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+
+  const amount = parseFloat(req.body.amount);
+  if (isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Validation failed', details: ['amount must be a positive number'] });
+  }
+  const { payment_date, source_account, notes } = req.body;
+
+  try {
+    const cardCheck = await pool.query('SELECT id FROM credit_cards WHERE id = $1', [id]);
+    if (cardCheck.rowCount === 0) return res.status(404).json({ error: 'Card not found' });
+
+    const result = await pool.query(`
+      INSERT INTO credit_card_payments (credit_card_id, payment_date, amount, source_account, notes)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [id, payment_date || new Date().toISOString().slice(0, 10), amount, source_account || null, notes || null]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to log payment' });
+  }
+});
+
+app.delete('/api/credit-card-payments/:paymentId', async (req, res) => {
+  const paymentId = parseInt(req.params.paymentId, 10);
+  if (isNaN(paymentId)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const result = await pool.query('DELETE FROM credit_card_payments WHERE id = $1 RETURNING id', [paymentId]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: result.rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete payment' });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`Finance API running on http://0.0.0.0:${port}`);
 });

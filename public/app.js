@@ -1964,6 +1964,8 @@ function loadActiveSubTabData(name) {
     if (name === 'history') {
         loadMoreTransactionsList();
         populateCategoryFilter();
+    } else if (name === 'cards') {
+        loadCreditCards();
     } else if (name === 'settings') {
         loadMoreBaseline();
         loadMoreTools();
@@ -2121,3 +2123,445 @@ setInterval(() => {
     // current month. Cheap DOM-only operation; safe to call unconditionally.
     updateMonthStepperUI();
 }, 30000);
+// ============================================
+// Credit cards (More > Cards)
+// ============================================
+
+let creditCards = [];
+let editingCardId = null;
+let cardRewardRates = {};       // working copy while the modal is open
+let paymentModalCardId = null;  // which card the payment modal is currently for
+
+async function loadCreditCards() {
+    const list = document.getElementById('creditCardsList');
+    if (!list) return;
+    try {
+        creditCards = await fetchJSON(`${API_URL}/credit-cards`);
+        renderCreditCards();
+    } catch (err) {
+        console.error('Failed to load credit cards:', err);
+        list.innerHTML = '<div class="empty-state">Couldn\'t load cards.</div>';
+    }
+}
+
+function renderCreditCards() {
+    const list = document.getElementById('creditCardsList');
+    if (!list) return;
+    renderCreditCardsOverview();
+    if (creditCards.length === 0) {
+        list.innerHTML = '<div class="empty-state">No cards yet. Tap "+ Add card" to start tracking one.</div>';
+        return;
+    }
+    list.innerHTML = creditCards.map(renderCreditCardItem).join('');
+}
+
+// Aggregate stats across all active cards: total balance vs total limit,
+// overall utilization, number of accounts, average account age, and total
+// annual fees. Inactive/closed cards are excluded so a closed card doesn't
+// skew utilization or age numbers you're no longer carrying.
+function renderCreditCardsOverview() {
+    const overview = document.getElementById('creditCardsOverview');
+    const grid = document.getElementById('creditCardsOverviewGrid');
+    const utilFill = document.getElementById('creditCardsOverviewUtilFill');
+    if (!overview || !grid) return;
+
+    const active = creditCards.filter(c => c.is_active);
+    if (active.length === 0) {
+        overview.hidden = true;
+        return;
+    }
+
+    let totalBalance = 0;
+    let totalLimit = 0;
+    let totalAnnualFee = 0;
+    let ageSum = 0;
+    let ageCount = 0;
+
+    active.forEach(c => {
+        totalBalance += parseFloat(c.current_balance || 0);
+        if (c.credit_limit != null) totalLimit += parseFloat(c.credit_limit);
+        if (c.annual_fee != null) totalAnnualFee += parseFloat(c.annual_fee);
+        if (c.age_years != null) { ageSum += parseFloat(c.age_years); ageCount++; }
+    });
+
+    const openDates = active.map(c => c.opened_date).filter(d => d).map(d => new Date(d));
+    let monthsSinceNewestCard = null;
+    let newestCardLabel = '';
+    if (openDates.length > 0) {
+        const newestCardDate = new Date(Math.max(...openDates));
+        const now = new Date();
+        monthsSinceNewestCard = (now.getFullYear() - newestCardDate.getFullYear()) * 12
+            + (now.getMonth() - newestCardDate.getMonth());
+        if (now.getDate() < newestCardDate.getDate()) monthsSinceNewestCard--;
+        monthsSinceNewestCard = Math.max(0, monthsSinceNewestCard);
+        newestCardLabel = newestCardDate.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+    }
+
+    const overallUtilPct = totalLimit > 0 ? (totalBalance / totalLimit) * 100 : null;
+    const avgAge = ageCount > 0 ? (ageSum / ageCount) : null;
+    const availableCredit = totalLimit > 0 ? totalLimit - totalBalance : null;
+
+    let utilClass = '';
+    if (overallUtilPct !== null) {
+        if (overallUtilPct >= 75) utilClass = 'high';
+        else if (overallUtilPct >= 30) utilClass = 'moderate';
+    }
+
+    const stats = [
+        { label: 'Accounts', value: active.length },
+        { label: 'Total balance', value: `$${totalBalance.toFixed(2)}` },
+        { label: 'Total limit', value: totalLimit > 0 ? `$${totalLimit.toFixed(2)}` : '—' },
+        { label: 'Available credit', value: availableCredit != null ? `$${availableCredit.toFixed(2)}` : '—' },
+        { label: 'Overall utilization', value: overallUtilPct != null ? `${overallUtilPct.toFixed(1)}%` : '—' },
+        { label: 'Avg. account age', value: avgAge != null ? `${avgAge.toFixed(1)}y` : '—' },
+        { label: `Months since newest card${newestCardLabel ? ' (' + newestCardLabel + ')' : ''}`, 
+            value: monthsSinceNewestCard != null ? monthsSinceNewestCard : '—' },
+        { label: 'Total annual fees', value: `$${totalAnnualFee.toFixed(2)}/yr` },
+    ];
+
+    grid.innerHTML = stats.map(s => `
+        <div class="cc-overview-stat">
+            <div class="cc-overview-stat-value">${s.value}</div>
+            <div class="cc-overview-stat-label">${s.label}</div>
+        </div>
+    `).join('');
+
+    if (utilFill) {
+        utilFill.className = `cc-overview-util-fill ${utilClass}`;
+        utilFill.style.width = overallUtilPct != null ? `${Math.min(100, Math.max(0, overallUtilPct)).toFixed(1)}%` : '0%';
+    }
+
+    overview.hidden = false;
+}
+
+function renderCreditCardItem(c) {
+    const balance = parseFloat(c.current_balance || 0);
+    const limit = c.credit_limit != null ? parseFloat(c.credit_limit) : null;
+    const utilPct = c.utilization_pct != null ? parseFloat(c.utilization_pct) * 100 : null;
+
+    let utilClass = '';
+    if (utilPct !== null) {
+        if (utilPct >= 75) utilClass = 'high';
+        else if (utilPct >= 30) utilClass = 'moderate';
+    }
+
+    // Due date badge
+    let dueBadge = '';
+    if (c.days_until_due != null) {
+        let cls = '';
+        let text = `Due in ${c.days_until_due}d`;
+        if (c.days_until_due <= 0) { cls = 'due-overdue'; text = 'Due today'; }
+        else if (c.days_until_due <= 5) { cls = 'due-soon'; }
+        dueBadge = `<span class="${cls}">${text}</span>`;
+    }
+
+    // Age
+    let ageText = '';
+    if (c.age_years != null) {
+        ageText = `<span>${c.age_years}y old</span>`;
+    }
+
+    // APR / annual fee
+    const aprText = c.apr != null ? `<span>${parseFloat(c.apr).toFixed(2)}% APR</span>` : '';
+    const feeText = c.annual_fee != null && parseFloat(c.annual_fee) > 0
+        ? `<span>$${parseFloat(c.annual_fee).toFixed(2)}/yr fee</span>` : '';
+
+    // Rewards summary — show top 3 categories by rate plus default
+    let rewardsHtml = '';
+    const rates = c.reward_rates || {};
+    const entries = Object.entries(rates);
+    if (entries.length > 0) {
+        entries.sort((a, b) => b[1] - a[1]);
+        const top = entries.slice(0, 3);
+        const maxRate = top[0][1];
+        const label = c.reward_type === 'cashback' ? '%' : 'x';
+        rewardsHtml = `<div class="credit-card-rewards">${top.map(([cat, rate]) =>
+            `<span class="${rate === maxRate ? 'best-rate' : ''}">${escapeHtml(cat)}: ${rate}${label}</span>`
+        ).join(' · ')}</div>`;
+    }
+
+    const lastPayment = c.last_payment_date
+        ? `<span>Last payment: $${parseFloat(c.last_payment_amount).toFixed(2)} on ${new Date(c.last_payment_date).toLocaleDateString()}</span>`
+        : '';
+
+    return `
+        <div class="credit-card-item ${c.is_active ? '' : 'inactive'}" data-card-id="${c.id}">
+            <div class="credit-card-header">
+                <div>
+                    <span class="credit-card-name">${escapeHtml(c.account_name)}</span>
+                    ${c.issuer ? `<span class="credit-card-issuer">${escapeHtml(c.issuer)}${c.last_four ? ' •••• ' + escapeHtml(c.last_four) : ''}</span>` : ''}
+                </div>
+                <div class="credit-card-balance">$${balance.toFixed(2)}${limit ? ` / $${limit.toFixed(2)}` : ''}</div>
+            </div>
+            ${limit ? `
+            <div class="credit-card-util-bar">
+                <div class="credit-card-util-fill ${utilClass}" style="width: ${Math.min(100, Math.max(0, utilPct)).toFixed(1)}%"></div>
+            </div>` : ''}
+            <div class="credit-card-meta-row">
+                ${dueBadge}
+                ${ageText}
+                ${aprText}
+                ${feeText}
+                ${lastPayment}
+            </div>
+            ${rewardsHtml}
+        </div>
+    `;
+}
+
+// ===== Card add/edit modal =====
+
+const cardModal = document.getElementById('cardModal');
+
+function renderRewardRateChips() {
+    const holder = document.getElementById('cardRewardRatesList');
+    const entries = Object.entries(cardRewardRates);
+    if (entries.length === 0) {
+        holder.innerHTML = '<span class="empty-state" style="padding:0;font-size:12px;">No categories added yet</span>';
+        return;
+    }
+    holder.innerHTML = entries.map(([cat, rate]) => `
+        <span class="reward-rate-chip" data-cat="${escapeHtml(cat)}">
+            ${escapeHtml(cat)}: ${rate}
+            <button type="button" data-remove-cat="${escapeHtml(cat)}" aria-label="Remove">×</button>
+        </span>
+    `).join('');
+}
+
+document.getElementById('cardRewardRatesList').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove-cat]');
+    if (!btn) return;
+    delete cardRewardRates[btn.dataset.removeCat];
+    renderRewardRateChips();
+});
+
+document.getElementById('cardRewardRateAddBtn').addEventListener('click', () => {
+    const catInput = document.getElementById('cardRewardCategoryInput');
+    const rateInput = document.getElementById('cardRewardRateInput');
+    const cat = catInput.value.trim().toLowerCase();
+    const rate = parseFloat(rateInput.value);
+    if (!cat || isNaN(rate)) return;
+    cardRewardRates[cat] = rate;
+    catInput.value = '';
+    rateInput.value = '';
+    renderRewardRateChips();
+    catInput.focus();
+});
+
+function openCardModalForAdd() {
+    editingCardId = null;
+    cardRewardRates = {};
+    document.getElementById('cardModalTitle').textContent = 'New credit card';
+    document.getElementById('cardAccountName').value = '';
+    document.getElementById('cardIssuer').value = '';
+    document.getElementById('cardLastFour').value = '';
+    document.getElementById('cardLimit').value = '';
+    document.getElementById('cardStatementDay').value = '';
+    document.getElementById('cardDueDay').value = '';
+    document.getElementById('cardApr').value = '';
+    document.getElementById('cardAnnualFee').value = '';
+    document.getElementById('cardOpenedDate').value = '';
+    document.getElementById('cardRewardType').value = 'cashback';
+    document.getElementById('cardOpeningBalance').value = '0';
+    document.getElementById('cardBalanceAsOf').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('cardNotes').value = '';
+    document.getElementById('cardEditButtons').style.display = 'none';
+    renderRewardRateChips();
+    cardModal.classList.add('active');
+    document.getElementById('cardAccountName').focus();
+}
+
+function openCardModalForEdit(card) {
+    editingCardId = card.id;
+    cardRewardRates = { ...(card.reward_rates || {}) };
+    document.getElementById('cardModalTitle').textContent = 'Edit credit card';
+    document.getElementById('cardAccountName').value = card.account_name || '';
+    document.getElementById('cardIssuer').value = card.issuer || '';
+    document.getElementById('cardLastFour').value = card.last_four || '';
+    document.getElementById('cardLimit').value = card.credit_limit != null ? parseFloat(card.credit_limit).toFixed(2) : '';
+    document.getElementById('cardStatementDay').value = card.statement_day || '';
+    document.getElementById('cardDueDay').value = card.due_day || '';
+    document.getElementById('cardApr').value = card.apr != null ? parseFloat(card.apr).toFixed(2) : '';
+    document.getElementById('cardAnnualFee').value = card.annual_fee != null ? parseFloat(card.annual_fee).toFixed(2) : '';
+    document.getElementById('cardOpenedDate').value = card.opened_date ? card.opened_date.slice(0, 10) : '';
+    document.getElementById('cardRewardType').value = card.reward_type || 'cashback';
+    document.getElementById('cardOpeningBalance').value = card.opening_balance != null ? parseFloat(card.opening_balance).toFixed(2) : '0';
+    document.getElementById('cardBalanceAsOf').value = card.balance_as_of ? card.balance_as_of.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    document.getElementById('cardNotes').value = card.notes || '';
+    document.getElementById('cardEditButtons').style.display = 'grid';
+    renderRewardRateChips();
+    cardModal.classList.add('active');
+}
+
+document.getElementById('addCardBtn').addEventListener('click', openCardModalForAdd);
+document.getElementById('cardCancelBtn').addEventListener('click', () => cardModal.classList.remove('active'));
+closeOnBackdropClick(cardModal, () => cardModal.classList.remove('active'));
+
+// Click a card item to edit it
+document.getElementById('creditCardsList').addEventListener('click', async (e) => {
+    const item = e.target.closest('.credit-card-item');
+    if (!item) return;
+    const id = parseInt(item.dataset.cardId, 10);
+    if (isNaN(id)) return;
+    try {
+        const card = await fetchJSON(`${API_URL}/credit-cards/${id}`);
+        openCardModalForEdit(card);
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+document.getElementById('cardSaveBtn').addEventListener('click', async () => {
+    const payload = {
+        account_name: document.getElementById('cardAccountName').value.trim(),
+        issuer: document.getElementById('cardIssuer').value.trim() || null,
+        last_four: document.getElementById('cardLastFour').value.trim() || null,
+        credit_limit: document.getElementById('cardLimit').value ? parseFloat(document.getElementById('cardLimit').value) : null,
+        statement_day: document.getElementById('cardStatementDay').value ? parseInt(document.getElementById('cardStatementDay').value, 10) : null,
+        due_day: document.getElementById('cardDueDay').value ? parseInt(document.getElementById('cardDueDay').value, 10) : null,
+        apr: document.getElementById('cardApr').value ? parseFloat(document.getElementById('cardApr').value) : null,
+        annual_fee: document.getElementById('cardAnnualFee').value ? parseFloat(document.getElementById('cardAnnualFee').value) : 0,
+        opened_date: document.getElementById('cardOpenedDate').value || null,
+        reward_type: document.getElementById('cardRewardType').value,
+        reward_rates: cardRewardRates,
+        opening_balance: document.getElementById('cardOpeningBalance').value ? parseFloat(document.getElementById('cardOpeningBalance').value) : 0,
+        balance_as_of: document.getElementById('cardBalanceAsOf').value || null,
+        notes: document.getElementById('cardNotes').value.trim() || null,
+    };
+
+    const btn = document.getElementById('cardSaveBtn');
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    try {
+        const url = editingCardId === null ? `${API_URL}/credit-cards` : `${API_URL}/credit-cards/${editingCardId}`;
+        const method = editingCardId === null ? 'POST' : 'PUT';
+        const resp = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            const detail = err.details ? '\n\n' + err.details.join('\n') : '';
+            throw new Error((err.error || 'Save failed') + detail);
+        }
+        cardModal.classList.remove('active');
+        await loadCreditCards();
+    } catch (err) {
+        alert('Failed to save card.\n\n' + err.message);
+        console.error(err);
+    } finally {
+        btn.textContent = 'Save';
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('cardDeleteBtn').addEventListener('click', async () => {
+    if (editingCardId === null) return;
+    if (!confirm('Delete this card? Its logged payments will also be deleted. Transactions in your history are NOT affected.')) return;
+    try {
+        const resp = await fetch(`${API_URL}/credit-cards/${editingCardId}`, { method: 'DELETE' });
+        if (!resp.ok) throw new Error('Delete failed');
+        cardModal.classList.remove('active');
+        await loadCreditCards();
+    } catch (err) {
+        alert('Failed to delete.');
+        console.error(err);
+    }
+});
+
+// ===== Log payment modal =====
+
+const cardPaymentModal = document.getElementById('cardPaymentModal');
+
+async function openPaymentModalFor(cardId) {
+    paymentModalCardId = cardId;
+    const card = creditCards.find(c => c.id === cardId);
+    document.getElementById('cardPaymentSubtitle').textContent = card
+        ? `Record a payment made toward ${card.account_name}. This reduces its tracked balance going forward.`
+        : 'Record a payment made toward this card.';
+    document.getElementById('cardPaymentAmount').value = '';
+    document.getElementById('cardPaymentDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('cardPaymentSource').value = '';
+    document.getElementById('cardPaymentNotes').value = '';
+    cardModal.classList.remove('active');
+    cardPaymentModal.classList.add('active');
+    await loadPaymentHistory(cardId);
+}
+
+document.getElementById('cardLogPaymentBtn').addEventListener('click', () => {
+    if (editingCardId !== null) openPaymentModalFor(editingCardId);
+});
+
+document.getElementById('cardPaymentCancelBtn').addEventListener('click', () => cardPaymentModal.classList.remove('active'));
+closeOnBackdropClick(cardPaymentModal, () => cardPaymentModal.classList.remove('active'));
+
+async function loadPaymentHistory(cardId) {
+    const holder = document.getElementById('cardPaymentHistory');
+    holder.innerHTML = '<div class="empty-state" style="padding:0;">Loading…</div>';
+    try {
+        const payments = await fetchJSON(`${API_URL}/credit-cards/${cardId}/payments?limit=12`);
+        if (payments.length === 0) {
+            holder.innerHTML = '<div class="card-payment-history-empty">No payments logged yet.</div>';
+            return;
+        }
+        holder.innerHTML = payments.map(p => `
+            <div class="card-payment-history-item">
+                <span>${new Date(p.payment_date).toLocaleDateString()}${p.source_account ? ' · ' + escapeHtml(p.source_account) : ''}</span>
+                <span>$${parseFloat(p.amount).toFixed(2)}</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error(err);
+        holder.innerHTML = '<div class="card-payment-history-empty">Couldn\'t load history.</div>';
+    }
+}
+
+document.getElementById('cardPaymentSaveBtn').addEventListener('click', async () => {
+    if (paymentModalCardId === null) return;
+    const amount = parseFloat(document.getElementById('cardPaymentAmount').value);
+    if (isNaN(amount) || amount <= 0) {
+        alert('Enter a valid payment amount.');
+        return;
+    }
+    const payload = {
+        amount,
+        payment_date: document.getElementById('cardPaymentDate').value || null,
+        source_account: document.getElementById('cardPaymentSource').value.trim() || null,
+        notes: document.getElementById('cardPaymentNotes').value.trim() || null,
+    };
+
+    const btn = document.getElementById('cardPaymentSaveBtn');
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    try {
+        const resp = await fetch(`${API_URL}/credit-cards/${paymentModalCardId}/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            const detail = err.details ? '\n\n' + err.details.join('\n') : '';
+            throw new Error((err.error || 'Save failed') + detail);
+        }
+        await loadPaymentHistory(paymentModalCardId);
+        await loadCreditCards();
+        document.getElementById('cardPaymentAmount').value = '';
+        document.getElementById('cardPaymentNotes').value = '';
+        const successMsg = document.getElementById('successMsg');
+        if (successMsg) {
+            successMsg.textContent = 'Payment logged';
+            successMsg.hidden = false;
+            setTimeout(() => { successMsg.hidden = true; }, 2000);
+        }
+    } catch (err) {
+        alert('Failed to log payment.\n\n' + err.message);
+        console.error(err);
+    } finally {
+        btn.textContent = 'Save payment';
+        btn.disabled = false;
+    }
+});
