@@ -182,7 +182,7 @@
                     <div class="top-categories-empty">Loading…</div>
                 </div>
             </div>
-            </div><!-- end #homeTab -->
+        </div><!-- end #homeTab -->
         
         <!-- ====== ADD TAB ====== -->
         <!-- Stage 3 placed the existing transaction form here. The "this repeats" toggle
@@ -285,7 +285,66 @@
             </div>
         </div>
         
-        <!-- ====== MORE TAB ====== -->
+        <!-- ====== INSIGHTS TAB ====== -->
+        <div class="tab-pane" id="insightsTab" data-tab="insights">
+            <!-- Insights: graphical read-outs that previously required opening
+                 Metabase. All four charts render as proportional bars using the
+                 same visual language as the Home "Top X" cards (and credit card
+                 utilization bars) — no charting library, keeps bundle size down. -->
+
+            <!-- Month stepper — shared by the two month-scoped charts below
+                 (Spending by category / Spending by account). Credit utilization
+                 and the trend chart are always "current / trailing N months"
+                 since they reflect live balances, not a point-in-time ledger. -->
+            <div class="month-stepper" id="insightsMonthStepper" role="group" aria-label="Change month for spending charts">
+                <button type="button" class="month-stepper-arrow" id="insightsMonthStepperPrev" aria-label="Previous month">‹</button>
+                <div class="month-stepper-label" id="insightsMonthStepperLabel" aria-live="polite">—</div>
+                <button type="button" class="month-stepper-arrow" id="insightsMonthStepperNext" aria-label="Next month" disabled>›</button>
+            </div>
+
+            <div class="top-categories-card" id="insightsCategoriesCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading" id="insightsCategoriesHeading">Spending by category</h2>
+                </div>
+                <div id="insightsCategoriesList">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
+
+            <div class="top-categories-card" id="insightsAccountsCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading" id="insightsAccountsHeading">Spending by account</h2>
+                </div>
+                <div id="insightsAccountsList">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
+
+            <div class="top-categories-card" id="insightsUtilizationCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Credit card utilization</h2>
+                </div>
+                <div id="insightsUtilizationList">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
+
+            <div class="top-categories-card" id="insightsTrendCard">
+                <div class="card-header-row">
+                    <h2 class="card-heading">Last 6 months</h2>
+                </div>
+                <div class="insights-trend-legend">
+                    <span><i class="insights-trend-swatch income"></i>Income</span>
+                    <span><i class="insights-trend-swatch spending"></i>Spending</span>
+                    <span><i class="insights-trend-swatch bills"></i>Bills</span>
+                    <span><i class="insights-trend-swatch savings"></i>Savings</span>
+                </div>
+                <div id="insightsTrendChart" class="insights-trend-chart">
+                    <div class="top-categories-empty">Loading…</div>
+                </div>
+            </div>
+        </div>
+
         <div class="tab-pane" id="moreTab" data-tab="more">
             <!-- Sub-tab selector: three sections inside More (Recurring moved to Plan tab in stage 2) -->
             <div class="sub-tabs" role="tablist" aria-label="More sections">
@@ -398,6 +457,14 @@
                 <line x1="15" y1="3" x2="15" y2="7"/>
             </svg>
             <span class="nav-label">Plan</span>
+        </button>
+        <button type="button" class="nav-tab" data-target="insights">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="5" y1="20" x2="5" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="19" y1="20" x2="19" y2="14"/>
+            </svg>
+            <span class="nav-label">Insights</span>
         </button>
         <button type="button" class="nav-tab" data-target="more">
             <svg viewBox="0 0 24 24" aria-hidden="true">

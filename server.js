@@ -522,6 +522,44 @@ function parseMonthParam(raw) {
 //
 // ?limit is capped at 50 (raised from 20) so the Home "Show all" toggle can
 // return a full month's categories as a bar chart, not just the top 20.
+
+// Monthly trend for the Insights tab: income/spending/bills/savings totals
+// per month over a trailing window (default 6, capped at 24). Uses
+// generate_series so months with zero activity still appear as a zero bar
+// instead of being silently skipped (important for grouped-bar charts —
+// a missing bar reads very differently from a zero-height bar).
+app.get('/api/insights/monthly-trend', async (req, res) => {
+  try {
+    let months = parseInt(req.query.months, 10);
+    if (isNaN(months) || months < 1) months = 6;
+    if (months > 24) months = 24;
+
+    const result = await pool.query(`
+      WITH series AS (
+        SELECT generate_series(
+          date_trunc('month', CURRENT_DATE) - ($1 - 1 || ' months')::interval,
+          date_trunc('month', CURRENT_DATE),
+          '1 month'
+        )::date AS month
+      )
+      SELECT
+        s.month,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'Income'), 0)   AS income,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'Spending'), 0) AS spending,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'Bills'), 0)    AS bills,
+        COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'Savings'), 0) AS savings
+      FROM series s
+      LEFT JOIN transactions t ON t.month = s.month
+      GROUP BY s.month
+      ORDER BY s.month
+    `, [months]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 app.get('/api/spending-by-category', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit, 10);

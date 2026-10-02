@@ -1579,6 +1579,14 @@ function switchTab(tabName) {
     });
     // Scroll to top when changing tabs so the new tab starts fresh
     window.scrollTo({ top: 0, behavior: 'instant' });
+
+    // Insights is read-only and a bit data-heavy (4 fetches), so it's loaded
+    // lazily on first visit rather than on every app load like Home. Repeat
+    // visits just re-fetch fresh — no caching — since the point of a charts
+    // tab is to reflect whatever's changed since you were last on it.
+    if (tabName === 'insights') {
+        loadInsightsAll();
+    }
 }
 
 document.querySelectorAll('.nav-tab').forEach(btn => {
@@ -2591,3 +2599,193 @@ document.getElementById('cardPaymentSaveBtn').addEventListener('click', async ()
         btn.disabled = false;
     }
 });
+
+// ============================================
+// Insights tab — graphical read-outs (previously only available in Metabase).
+// All charts are plain proportional-width/height bars using the existing
+// top-cat-item / credit-card-util visual language, so no charting library
+// is pulled in. Four cards:
+//   1. Spending by category (month-scoped, shares the stepper below)
+//   2. Spending by account  (month-scoped, shares the stepper below)
+//   3. Credit card utilization (always "right now" — live balances)
+//   4. Trailing 6-month income/spending/bills/savings trend (grouped bars)
+// ============================================
+
+// Separate month state from Home's displayedMonth — browsing Insights
+// history shouldn't jump Home's Top X cards to a different month and vice
+// versa. Mirrors the firstOfMonth/isCurrent/step pattern already used there.
+let insightsDisplayedMonth = firstOfMonth(new Date());
+
+function insightsMonthParam() {
+    const y = insightsDisplayedMonth.getFullYear();
+    const m = String(insightsDisplayedMonth.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+}
+
+function isInsightsMonthCurrent() {
+    return insightsDisplayedMonth.getTime() === firstOfMonth(new Date()).getTime();
+}
+
+function stepInsightsMonth(delta) {
+    const next = new Date(insightsDisplayedMonth.getFullYear(), insightsDisplayedMonth.getMonth() + delta, 1);
+    const currentMonth = firstOfMonth(new Date());
+    if (next.getTime() > currentMonth.getTime()) return; // never browse into the future
+    insightsDisplayedMonth = next;
+    updateInsightsMonthUI();
+    loadInsightsCategories();
+    loadInsightsAccounts();
+}
+
+function updateInsightsMonthUI() {
+    const label = document.getElementById('insightsMonthStepperLabel');
+    const nextBtn = document.getElementById('insightsMonthStepperNext');
+    if (label) label.textContent = insightsDisplayedMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    if (nextBtn) nextBtn.disabled = isInsightsMonthCurrent();
+    const catHeading = document.getElementById('insightsCategoriesHeading');
+    const acctHeading = document.getElementById('insightsAccountsHeading');
+    const monthName = insightsDisplayedMonth.toLocaleString(undefined, { month: 'long' });
+    if (catHeading) catHeading.textContent = `Spending by category — ${monthName}`;
+    if (acctHeading) acctHeading.textContent = `Spending by account — ${monthName}`;
+}
+
+// Generic full-width bar list renderer — shared by categories/accounts since
+// both are "label, amount, proportional bar" shaped. Reuses .top-cat-item /
+// .top-cat-bar classes already styled for the Home tab.
+function renderBarList(target, rows, labelKey, emptyMsg) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+        target.innerHTML = `<div class="top-categories-empty">${emptyMsg}</div>`;
+        return;
+    }
+    const maxTotal = rows.reduce((m, r) => Math.max(m, parseFloat(r.total)), 0);
+    target.innerHTML = rows.map(r => {
+        const total = parseFloat(r.total);
+        const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+        return `
+            <div class="top-cat-item">
+                <div class="top-cat-row">
+                    <div class="top-cat-name">${escapeHtml(r[labelKey])}</div>
+                    <div class="top-cat-amount">$${total.toFixed(2)}</div>
+                </div>
+                <div class="top-cat-bar"><div class="top-cat-bar-fill" style="width: ${pct.toFixed(1)}%"></div></div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadInsightsCategories() {
+    const target = document.getElementById('insightsCategoriesList');
+    if (!target) return;
+    try {
+        const monthParam = isInsightsMonthCurrent() ? '' : `&month=${insightsMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-category?limit=50${monthParam}`);
+        const rows = await resp.json();
+        renderBarList(target, rows, 'category', 'No spending recorded for this month.');
+    } catch (err) {
+        console.error('Failed to load insights categories:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
+async function loadInsightsAccounts() {
+    const target = document.getElementById('insightsAccountsList');
+    if (!target) return;
+    try {
+        const monthParam = isInsightsMonthCurrent() ? '' : `&month=${insightsMonthParam()}`;
+        const resp = await fetch(`${API_URL}/spending-by-account?limit=50${monthParam}`);
+        const rows = await resp.json();
+        renderBarList(target, rows, 'account', 'No account activity recorded for this month.');
+    } catch (err) {
+        console.error('Failed to load insights accounts:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
+// Credit card utilization — reuses the same /api/credit-cards data the Cards
+// tab already fetches, just re-rendered as a sorted bar list (highest
+// utilization first) instead of full card detail panels. Always reflects
+// live balances; no month scoping (utilization isn't a monthly concept).
+async function loadInsightsUtilization() {
+    const target = document.getElementById('insightsUtilizationList');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/credit-cards`);
+        const cards = await resp.json();
+        const active = Array.isArray(cards) ? cards.filter(c => c.is_active && c.credit_limit != null) : [];
+        if (active.length === 0) {
+            target.innerHTML = '<div class="top-categories-empty">No credit cards with a limit set yet.</div>';
+            return;
+        }
+        active.sort((a, b) => parseFloat(b.utilization_pct || 0) - parseFloat(a.utilization_pct || 0));
+        target.innerHTML = active.map(c => {
+            const pct = parseFloat(c.utilization_pct || 0) * 100;
+            let cls = '';
+            if (pct >= 75) cls = 'high';
+            else if (pct >= 30) cls = 'moderate';
+            return `
+                <div class="top-cat-item">
+                    <div class="top-cat-row">
+                        <div class="top-cat-name">${escapeHtml(c.account_name)}</div>
+                        <div class="top-cat-amount">${pct.toFixed(1)}%</div>
+                    </div>
+                    <div class="top-cat-bar"><div class="top-cat-bar-fill ${cls}" style="width: ${Math.min(100, Math.max(0, pct)).toFixed(1)}%"></div></div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load insights utilization:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
+// Trailing 6-month income/spending/bills/savings — vertical grouped bars,
+// one cluster of 4 per month, all scaled to the single largest value across
+// every month/type so relative size reads correctly across the whole chart.
+async function loadInsightsTrend() {
+    const target = document.getElementById('insightsTrendChart');
+    if (!target) return;
+    try {
+        const resp = await fetch(`${API_URL}/insights/monthly-trend?months=6`);
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+            target.innerHTML = '<div class="top-categories-empty">No data yet.</div>';
+            return;
+        }
+        const maxVal = rows.reduce((m, r) => Math.max(
+            m, parseFloat(r.income), parseFloat(r.spending), parseFloat(r.bills), parseFloat(r.savings)
+        ), 0);
+        target.innerHTML = rows.map(r => {
+            // Parse the YYYY-MM-DD parts directly rather than new Date(r.month) —
+            // that constructor treats bare date strings as UTC midnight, which
+            // rolls back a day (and can misname the month) in negative-UTC-offset
+            // timezones. Building a local-time Date from parts avoids that.
+            const [yy, mm] = r.month.split('-').map(Number);
+            const d = new Date(yy, mm - 1, 1);
+            const label = d.toLocaleString(undefined, { month: 'short' });
+            const bars = ['income', 'spending', 'bills', 'savings'].map(type => {
+                const val = parseFloat(r[type] || 0);
+                const h = maxVal > 0 ? (val / maxVal) * 100 : 0;
+                return `<div class="insights-trend-bar ${type}" style="height: ${h.toFixed(1)}%" title="${type}: $${val.toFixed(2)}"></div>`;
+            }).join('');
+            return `
+                <div class="insights-trend-month">
+                    <div class="insights-trend-bars">${bars}</div>
+                    <div class="insights-trend-month-label">${label}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load insights trend:', err);
+        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
+    }
+}
+
+function loadInsightsAll() {
+    updateInsightsMonthUI();
+    loadInsightsCategories();
+    loadInsightsAccounts();
+    loadInsightsUtilization();
+    loadInsightsTrend();
+}
+
+document.getElementById('insightsMonthStepperPrev')?.addEventListener('click', () => stepInsightsMonth(-1));
+document.getElementById('insightsMonthStepperNext')?.addEventListener('click', () => stepInsightsMonth(1));
