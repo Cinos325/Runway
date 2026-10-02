@@ -2700,43 +2700,6 @@ async function loadInsightsAccounts() {
     }
 }
 
-// Credit card utilization — reuses the same /api/credit-cards data the Cards
-// tab already fetches, just re-rendered as a sorted bar list (highest
-// utilization first) instead of full card detail panels. Always reflects
-// live balances; no month scoping (utilization isn't a monthly concept).
-async function loadInsightsUtilization() {
-    const target = document.getElementById('insightsUtilizationList');
-    if (!target) return;
-    try {
-        const resp = await fetch(`${API_URL}/credit-cards`);
-        const cards = await resp.json();
-        const active = Array.isArray(cards) ? cards.filter(c => c.is_active && c.credit_limit != null) : [];
-        if (active.length === 0) {
-            target.innerHTML = '<div class="top-categories-empty">No credit cards with a limit set yet.</div>';
-            return;
-        }
-        active.sort((a, b) => parseFloat(b.utilization_pct || 0) - parseFloat(a.utilization_pct || 0));
-        target.innerHTML = active.map(c => {
-            const pct = parseFloat(c.utilization_pct || 0) * 100;
-            let cls = '';
-            if (pct >= 75) cls = 'high';
-            else if (pct >= 30) cls = 'moderate';
-            return `
-                <div class="top-cat-item">
-                    <div class="top-cat-row">
-                        <div class="top-cat-name">${escapeHtml(c.account_name)}</div>
-                        <div class="top-cat-amount">${pct.toFixed(1)}%</div>
-                    </div>
-                    <div class="top-cat-bar"><div class="top-cat-bar-fill ${cls}" style="width: ${Math.min(100, Math.max(0, pct)).toFixed(1)}%"></div></div>
-                </div>
-            `;
-        }).join('');
-    } catch (err) {
-        console.error('Failed to load insights utilization:', err);
-        target.innerHTML = '<div class="top-categories-empty">Could not load.</div>';
-    }
-}
-
 // Trailing 6-month income/spending/bills/savings — vertical grouped bars,
 // one cluster of 4 per month, all scaled to the single largest value across
 // every month/type so relative size reads correctly across the whole chart.
@@ -2783,7 +2746,6 @@ function loadInsightsAll() {
     updateInsightsMonthUI();
     loadInsightsCategories();
     loadInsightsAccounts();
-    loadInsightsUtilization();
     loadInsightsTrend();
 }
 

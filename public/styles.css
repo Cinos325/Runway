@@ -2358,3 +2358,144 @@ input[type="date"] {
         grid-template-columns: repeat(4, 1fr);
     }
 }
+/* ============================================
+   Insights — "Last 6 months" trend chart
+   ============================================ */
+
+.insights-trend-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+}
+
+.insights-trend-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.insights-trend-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.insights-trend-swatch.income { background: var(--success); }
+.insights-trend-swatch.spending { background: var(--danger); }
+.insights-trend-swatch.bills { background: var(--warning); }
+.insights-trend-swatch.savings { background: var(--accent); }
+
+.insights-trend-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    height: 160px;
+    padding-top: 8px;
+}
+
+.insights-trend-month {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    height: 100%;
+}
+
+.insights-trend-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+}
+
+.insights-trend-bar {
+    width: 6px;
+    min-height: 2px;
+    border-radius: 2px 2px 0 0;
+    transition: height 0.4s ease;
+}
+
+.insights-trend-bar.income { background: var(--success); }
+.insights-trend-bar.spending { background: var(--danger); }
+.insights-trend-bar.bills { background: var(--warning); }
+.insights-trend-bar.savings { background: var(--accent); }
+
+.insights-trend-month-label {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+@media (min-width: 640px) {
+    .insights-trend-bar { width: 10px; }
+}
+
+/* ============================================
+   Add button — raised circular FAB in the bottom nav
+   Sits between Plan and Insights, pops out above the bar like an old
+   iPhone home button. Still a plain .nav-tab under the hood (flex: 1,
+   same data-target wiring) — this is pure CSS, no JS changes needed.
+   ============================================ */
+
+.nav-tab-fab {
+    position: relative;
+    overflow: visible;
+}
+
+.nav-tab-fab .nav-tab-fab-circle {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    border: 4px solid var(--bg-card);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-theme="dark"] .nav-tab-fab .nav-tab-fab-circle {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.nav-tab-fab:active .nav-tab-fab-circle {
+    transform: translateX(-50%) scale(0.92);
+}
+
+.nav-tab-fab svg {
+    width: 26px;
+    height: 26px;
+    stroke: #fff;
+    stroke-width: 2;
+    position: relative;
+    z-index: 1;
+}
+
+.nav-tab-fab.active svg {
+    fill: none;
+}
+
+.nav-tab-fab .nav-label {
+    margin-top: 24px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.nav-tab-fab.active .nav-label,
+.nav-tab-fab:hover .nav-label,
+.nav-tab-fab:active .nav-label {
+    color: var(--accent);
+}
