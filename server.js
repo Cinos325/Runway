@@ -519,11 +519,14 @@ function parseMonthParam(raw) {
 // because they're fixed obligations and would dominate the chart every month.
 // The optional ?month=YYYY-MM-DD param selects a historical month; the DB
 // truncates to first-of-month so any day within the month works the same.
+//
+// ?limit is capped at 50 (raised from 20) so the Home "Show all" toggle can
+// return a full month's categories as a bar chart, not just the top 20.
 app.get('/api/spending-by-category', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit, 10);
     if (isNaN(limit) || limit < 1) limit = 5;
-    if (limit > 20) limit = 20;
+    if (limit > 50) limit = 50;
     
     const month = parseMonthParam(req.query.month);
     
@@ -564,13 +567,16 @@ app.get('/api/spending-by-category', async (req, res) => {
 // Optional ?month=YYYY-MM-DD param selects a historical month, same convention
 // as /api/spending-by-category.
 //
+// ?limit is capped at 50 (raised from 20) so the Home "Show all" toggle can
+// return a full month's accounts as a bar chart, not just the top 20.
+//
 // Despite the path containing "spending", "spend" here means "outflow against
 // the account" — the broader sense than the Spending transaction type.
 app.get('/api/spending-by-account', async (req, res) => {
   try {
     let limit = parseInt(req.query.limit, 10);
     if (isNaN(limit) || limit < 1) limit = 5;
-    if (limit > 20) limit = 20;
+    if (limit > 50) limit = 50;
     
     const month = parseMonthParam(req.query.month);
     

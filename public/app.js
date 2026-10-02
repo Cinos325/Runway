@@ -2008,12 +2008,23 @@ updateThemeSegments();
 // Fetches /api/spending-by-category, displays each with a proportion bar
 // where the largest category fills 100%. When viewing a past month, appends
 // ?month= so the server returns that month's data.
+// Toggle state for the two Home "Top X" cards — false shows the top 5
+// (original behavior), true shows every category/account for the displayed
+// month as a full bar chart. Independent per-card; flipped by the "Show all"
+// / "Top 5" button in each card's header. Re-uses the exact same bar
+// rendering as the top-5 view (proportional width vs. the largest total) —
+// "chart mode" here is just "don't truncate the list," since each row was
+// already a horizontal bar.
+let topCategoriesShowAll = false;
+let topAccountsShowAll = false;
+
 async function loadTopCategories() {
     const target = document.getElementById('topCategoriesList');
     if (!target) return;
     try {
         const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
-        const resp = await fetch(`${API_URL}/spending-by-category?limit=5${monthParam}`);
+        const limit = topCategoriesShowAll ? 50 : 5;
+        const resp = await fetch(`${API_URL}/spending-by-category?limit=${limit}${monthParam}`);
         const rows = await resp.json();
         if (!Array.isArray(rows) || rows.length === 0) {
             const msg = isDisplayedMonthCurrent()
@@ -2054,7 +2065,8 @@ async function loadTopAccounts() {
     if (!target) return;
     try {
         const monthParam = isDisplayedMonthCurrent() ? '' : `&month=${displayedMonthParam()}`;
-        const resp = await fetch(`${API_URL}/spending-by-account?limit=5${monthParam}`);
+        const limit = topAccountsShowAll ? 50 : 5;
+        const resp = await fetch(`${API_URL}/spending-by-account?limit=${limit}${monthParam}`);
         const rows = await resp.json();
         if (!Array.isArray(rows) || rows.length === 0) {
             const msg = isDisplayedMonthCurrent()
@@ -2087,6 +2099,20 @@ async function loadTopAccounts() {
 // month change, heading refresh, and re-fetching both Top X cards.
 document.getElementById('monthStepperPrev').addEventListener('click', () => stepDisplayedMonth(-1));
 document.getElementById('monthStepperNext').addEventListener('click', () => stepDisplayedMonth(1));
+
+// "Show all" / "Top 5" toggles — each flips its own card's show-all flag,
+// updates its own button label, and re-fetches just that card (the month
+// stepper is untouched by this; whichever month is displayed stays displayed).
+document.getElementById('topCategoriesToggle').addEventListener('click', () => {
+    topCategoriesShowAll = !topCategoriesShowAll;
+    document.getElementById('topCategoriesToggle').textContent = topCategoriesShowAll ? 'Top 5' : 'Show all';
+    loadTopCategories();
+});
+document.getElementById('topAccountsToggle').addEventListener('click', () => {
+    topAccountsShowAll = !topAccountsShowAll;
+    document.getElementById('topAccountsToggle').textContent = topAccountsShowAll ? 'Top 5' : 'Show all';
+    loadTopAccounts();
+});
 
 loadSpendingPower();
 loadRecentTransactions();
